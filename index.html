@@ -237,10 +237,11 @@
             </label>
           </div>
 
-          <button id="startHostBtn" class="w-full py-3 bg-gradient-to-r from-emerald-600 via-green-600 to-amber-500 hover:from-emerald-500 hover:to-amber-400 font-extrabold text-sm rounded-xl text-black shadow-lg shadow-green-900/40 flex items-center justify-center gap-2 transition active:scale-95">
-            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
-            CREATE & LAUNCH ROOM
+          <button id="startHostBtn" class="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-green-600 to-amber-500 hover:from-emerald-500 hover:to-amber-400 font-extrabold text-sm rounded-xl text-black shadow-lg shadow-green-900/40 flex items-center justify-center gap-2 transition active:scale-95">
+            <i data-lucide="share-2" class="w-4 h-4"></i>
+            GENERATE ROOM CODE & INVITE
           </button>
+          <p class="text-[11px] text-emerald-300/70 text-center mt-2">Generates your code first so you can share with friends before playing!</p>
         </div>
 
         <!-- Join Room Panel -->
@@ -258,9 +259,95 @@
         <!-- Quick 1v1 Solo Practice -->
         <div class="mt-5 pt-4 border-t border-white/10 text-center">
           <button id="quickSoloBtn" class="text-xs text-emerald-400 hover:text-amber-300 font-semibold underline underline-offset-4 transition">
-            Solo Fast Play (You vs Chidi AI)
+            Solo Fast Play (Instant AI Duel)
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- WAITING ROOM / PRE-GAME STAGING LOUNGE (Share code before starting match) -->
+    <div id="waitingRoomView" class="hidden flex-1 flex items-center justify-center p-4 overflow-y-auto">
+      <div class="max-w-lg w-full bg-black/80 backdrop-blur-2xl border-2 border-emerald-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+        
+        <div class="text-center mb-5">
+          <span class="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-300 font-bold text-[11px] uppercase tracking-widest inline-flex items-center gap-1.5 mb-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            Table Ready • Share Before Starting
+          </span>
+          <h2 class="text-xl sm:text-2xl font-black text-white">GAME TABLE WAITING LOUNGE</h2>
+          <p class="text-xs text-white/60 mt-1">Copy and share this room code with friends. Tap "Start Match" when everyone is ready!</p>
+        </div>
+
+        <!-- Prominent Room Code Display Card -->
+        <div class="bg-gradient-to-br from-emerald-950/80 to-black border-2 border-amber-400/60 rounded-2xl p-4 sm:p-5 mb-5 text-center shadow-xl relative">
+          <div class="text-[11px] font-bold text-amber-300/80 uppercase tracking-widest mb-1">Your 6-Digit Room Code</div>
+          <div class="flex items-center justify-center gap-3 my-2">
+            <span id="waitingRoomCodeText" class="font-mono text-3xl sm:text-4xl font-black text-amber-400 tracking-widest select-all">WHOT77</span>
+            <button id="waitingCopyCodeBtn" title="Copy Code" class="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold transition flex items-center gap-1 text-xs active:scale-95">
+              <i data-lucide="copy" class="w-4 h-4"></i>
+              <span>Copy Code</span>
+            </button>
+          </div>
+
+          <!-- Quick Share Links -->
+          <div class="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-white/10 flex-wrap">
+            <button id="waitingShareLinkBtn" class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95">
+              <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+              <span>Copy Full Link</span>
+            </button>
+            <a id="waitingWhatsAppBtn" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95">
+              <span>💬 WhatsApp</span>
+            </a>
+            <a id="waitingTelegramBtn" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95">
+              <span>✈️ Telegram</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Players in Lobby Grid -->
+        <div class="mb-5 bg-white/5 border border-white/10 rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-white uppercase tracking-wider">Players in Lobby:</span>
+              <span id="waitingPlayerCountBadge" class="text-xs font-mono font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-400/30">1 Ready</span>
+            </div>
+            <!-- Quick Add Bot button -->
+            <button id="waitingAddBotBtn" class="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition active:scale-95">
+              <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+              <span>+ Add AI Bot</span>
+            </button>
+          </div>
+
+          <div id="waitingPlayersList" class="grid grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Host Start Game Action or Guest Waiting Message -->
+        <div id="hostWaitingActions">
+          <button id="waitingStartMatchBtn" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 via-green-500 to-amber-400 hover:from-emerald-400 hover:to-amber-300 font-black text-black text-sm sm:text-base rounded-2xl shadow-xl shadow-green-900/50 flex items-center justify-center gap-2 transition active:scale-95">
+            <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+            <span>START MATCH & DEAL CARDS</span>
+          </button>
+          <div class="flex items-center justify-between mt-3 text-xs">
+            <button id="waitingLeaveBtn" class="text-white/50 hover:text-red-400 transition">
+              ← Back to Lobby
+            </button>
+            <span class="text-white/40 text-[11px]">Deals 5 cards each when started</span>
+          </div>
+        </div>
+
+        <div id="guestWaitingMessage" class="hidden text-center p-4 rounded-2xl bg-white/5 border border-white/10">
+          <div class="flex items-center justify-center gap-2 text-amber-300 font-bold text-sm">
+            <i data-lucide="loader" class="w-4 h-4 animate-spin"></i>
+            <span>Waiting for Host to start match...</span>
+          </div>
+          <p class="text-xs text-white/50 mt-1">Chat in the Banter drawer or get ready!</p>
+          <button id="guestLeaveBtn" class="mt-3 text-xs text-red-400 hover:underline">
+            Leave Waiting Room
+          </button>
+        </div>
+
       </div>
     </div>
 
@@ -873,10 +960,11 @@
         this.aiThinkingTimeout = null;
       }
 
-      initRoom(roomCode, hostId, hostName, playerLimit, fillWithAi = true) {
+      initWaitingLobby(roomCode, hostId, hostName, playerLimit, fillWithAi = false) {
         this.roomCode = roomCode;
         this.hostId = hostId;
         this.playerLimit = playerLimit;
+        this.status = 'waiting';
         this.players = [
           {
             id: hostId,
@@ -892,7 +980,7 @@
         ];
 
         if (fillWithAi) {
-          const needed = playerLimit - 1;
+          const needed = Math.min(playerLimit - 1, 3);
           for (let i = 0; i < needed; i++) {
             const ai = DEFAULT_AI_NAMES[i % DEFAULT_AI_NAMES.length];
             this.players.push({
@@ -908,11 +996,75 @@
             });
           }
         }
+        this.notifyLobbyState();
+      }
 
+      addAiBot() {
+        if (this.players.length >= this.playerLimit) return false;
+        const currentAiCount = this.players.filter(p => p.isAi).length;
+        const aiInfo = DEFAULT_AI_NAMES[currentAiCount % DEFAULT_AI_NAMES.length];
+        this.players.push({
+          id: 'ai_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+          name: aiInfo.name,
+          avatar: aiInfo.avatar,
+          isAi: true,
+          cards: [],
+          cardCount: 0,
+          hasPenaltyStrike: false,
+          score: 0,
+          disqualified: false
+        });
+        sound.playTick();
+        this.notifyLobbyState();
+        return true;
+      }
+
+      removePlayer(playerId) {
+        const idx = this.players.findIndex(p => p.id === playerId);
+        if (idx !== -1 && this.players[idx].id !== this.hostId) {
+          this.players.splice(idx, 1);
+          sound.playTick();
+          this.notifyLobbyState();
+          return true;
+        }
+        return false;
+      }
+
+      notifyLobbyState() {
+        renderWaitingRoom();
+        if (syncChannel) {
+          try {
+            syncChannel.postMessage({
+              type: 'LOBBY_UPDATE',
+              roomCode: this.roomCode,
+              hostId: this.hostId,
+              playerLimit: this.playerLimit,
+              players: this.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                avatar: p.avatar,
+                isAi: p.isAi,
+                cardCount: 0,
+                cards: [],
+                hasPenaltyStrike: false,
+                score: 0,
+                disqualified: false
+              }))
+            });
+          } catch(e) {}
+        }
+      }
+
+      initRoom(roomCode, hostId, hostName, playerLimit, fillWithAi = true) {
+        this.initWaitingLobby(roomCode, hostId, hostName, playerLimit, fillWithAi);
         this.startMatch();
       }
 
       startMatch() {
+        if (this.players.length < 2) {
+          this.addAiBot();
+        }
+
         this.deck = createFullDeck();
         this.discardPile = [];
         this.status = 'playing';
@@ -936,6 +1088,36 @@
         this.lastAction = `${this.players[0].name} begins the round! Top card is ${starterCard.number} ${starterCard.suit}.`;
         this.resetTurnTimer(25);
         this.notifyState();
+
+        if (syncChannel) {
+          try {
+            syncChannel.postMessage({
+              type: 'MATCH_STARTED',
+              roomCode: this.roomCode,
+              payload: {
+                deckCount: this.deck.length,
+                discardPile: this.discardPile,
+                currentTurnIndex: this.currentTurnIndex,
+                activeShape: this.activeShape,
+                lastAction: this.lastAction,
+                status: this.status,
+                turnDuration: this.turnDuration,
+                timerStart: this.timerStart,
+                players: this.players.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                  isAi: p.isAi,
+                  cardCount: p.cards.length,
+                  cards: p.id === myPlayerId ? p.cards : [],
+                  hasPenaltyStrike: p.hasPenaltyStrike,
+                  score: p.score,
+                  disqualified: p.disqualified
+                }))
+              }
+            });
+          } catch(e) {}
+        }
       }
 
       get topDiscard() {
@@ -1599,6 +1781,22 @@
       }
     }
 
+    // Waiting Room UI Elements
+    const waitingRoomView = document.getElementById('waitingRoomView');
+    const waitingRoomCodeText = document.getElementById('waitingRoomCodeText');
+    const waitingCopyCodeBtn = document.getElementById('waitingCopyCodeBtn');
+    const waitingShareLinkBtn = document.getElementById('waitingShareLinkBtn');
+    const waitingWhatsAppBtn = document.getElementById('waitingWhatsAppBtn');
+    const waitingTelegramBtn = document.getElementById('waitingTelegramBtn');
+    const waitingPlayerCountBadge = document.getElementById('waitingPlayerCountBadge');
+    const waitingPlayersList = document.getElementById('waitingPlayersList');
+    const waitingAddBotBtn = document.getElementById('waitingAddBotBtn');
+    const hostWaitingActions = document.getElementById('hostWaitingActions');
+    const guestWaitingMessage = document.getElementById('guestWaitingMessage');
+    const waitingStartMatchBtn = document.getElementById('waitingStartMatchBtn');
+    const waitingLeaveBtn = document.getElementById('waitingLeaveBtn');
+    const guestLeaveBtn = document.getElementById('guestLeaveBtn');
+
     // ==========================================
     // 7. ROOM LAUNCH & PEER SYNC
     // ==========================================
@@ -1606,7 +1804,21 @@
       if (syncChannel) syncChannel.close();
       syncChannel = new BroadcastChannel(`whot_room_${roomCode}`);
       syncChannel.onmessage = (event) => {
-        if (event.data && event.data.type === 'STATE_UPDATE' && event.data.roomCode === game.roomCode) {
+        if (!event.data || event.data.roomCode !== game.roomCode) return;
+
+        if (event.data.type === 'LOBBY_UPDATE') {
+          // A guest or host joined/updated the lobby
+          game.hostId = event.data.hostId;
+          game.playerLimit = event.data.playerLimit;
+          game.players = event.data.players;
+          if (game.status === 'waiting') {
+            renderWaitingRoom();
+          }
+        } else if (event.data.type === 'MATCH_STARTED') {
+          // Host started the match! Transition everyone to game table
+          applyRemoteState(event.data.payload);
+          enterTableUI(game.roomCode);
+        } else if (event.data.type === 'STATE_UPDATE') {
           applyRemoteState(event.data.payload);
         }
       };
@@ -1652,7 +1864,7 @@
       renderGameTable();
     }
 
-    // Host Room Click
+    // Host Room Click: Generates code and opens Waiting Lounge first!
     startHostBtn.addEventListener('click', () => {
       sound.init();
       myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
@@ -1663,12 +1875,12 @@
       const roomCode = generateRoomCode();
 
       setupRoomChannel(roomCode);
-      game.initRoom(roomCode, myPlayerId, myPlayerName, limit, fillAi);
+      game.initWaitingLobby(roomCode, myPlayerId, myPlayerName, limit, fillAi);
 
-      enterTableUI(roomCode);
+      enterWaitingLobbyUI(roomCode, true);
     });
 
-    // Quick Solo Match Click
+    // Quick Solo Match Click: Instant play against AI
     quickSoloBtn.addEventListener('click', () => {
       sound.init();
       myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
@@ -1681,7 +1893,7 @@
       enterTableUI(roomCode);
     });
 
-    // Join Match Click
+    // Join Match Click: Joins waiting lobby
     submitJoinBtn.addEventListener('click', () => {
       sound.init();
       const code = joinCodeInput.value.trim().toUpperCase();
@@ -1693,22 +1905,177 @@
       localStorage.setItem('whot_player_name', myPlayerName);
 
       setupRoomChannel(code);
-
-      // Join room or create instance if joining peer
       game.roomCode = code;
-      game.initRoom(code, 'host_' + code, myPlayerName, 4, true);
+      game.initWaitingLobby(code, 'host_' + code, myPlayerName, 4, false);
 
-      // Replace first player with user
-      if (game.players.length > 0) {
-        game.players[0].id = myPlayerId;
-        game.players[0].name = myPlayerName;
+      // Add our self as guest
+      game.players[0].id = myPlayerId;
+      game.players[0].name = myPlayerName;
+
+      enterWaitingLobbyUI(code, false);
+
+      // Broadcast presence to room
+      if (syncChannel) {
+        syncChannel.postMessage({
+          type: 'LOBBY_UPDATE',
+          roomCode: code,
+          hostId: game.hostId,
+          playerLimit: game.playerLimit,
+          players: game.players
+        });
+      }
+    });
+
+    function enterWaitingLobbyUI(roomCode, isHost = true) {
+      lobbyView.classList.add('hidden');
+      gameTableView.classList.add('hidden');
+      waitingRoomView.classList.remove('hidden');
+
+      roomBadgeContainer.classList.remove('hidden');
+      roomBadgeContainer.classList.add('flex');
+      roomCodeDisplay.textContent = roomCode;
+      leaveRoomBtn.classList.remove('hidden');
+
+      waitingRoomCodeText.textContent = roomCode;
+
+      const shareUrl = getShareableRoomUrl(roomCode);
+      window.history.replaceState({ room: roomCode }, '', shareUrl);
+
+      // Set direct WhatsApp and Telegram share links
+      const shareMsg = `Join my Nigerian Whot! table now. Room Code: ${roomCode}\nPlay here: ${shareUrl}`;
+      waitingWhatsAppBtn.href = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMsg)}`;
+      waitingTelegramBtn.href = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`Join my Nigerian Whot! table! Room Code: ${roomCode}`)}`;
+
+      if (isHost) {
+        hostWaitingActions.classList.remove('hidden');
+        guestWaitingMessage.classList.add('hidden');
+      } else {
+        hostWaitingActions.classList.add('hidden');
+        guestWaitingMessage.classList.remove('hidden');
       }
 
-      enterTableUI(code);
+      renderWaitingRoom();
+      sound.playDealSnap();
+    }
+
+    function renderWaitingRoom() {
+      if (!waitingPlayersList) return;
+      waitingPlayersList.innerHTML = '';
+
+      const isHost = game.hostId === myPlayerId;
+
+      game.players.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-2.5 rounded-xl bg-white/10 border border-white/15';
+        
+        const isSelf = p.id === myPlayerId;
+        const isCurrentHost = p.id === game.hostId;
+
+        item.innerHTML = `
+          <div class="flex items-center gap-2 overflow-hidden">
+            <div class="w-8 h-8 rounded-full bg-emerald-800 border border-amber-400 flex items-center justify-center text-sm shadow shrink-0">
+              ${p.avatar || '👤'}
+            </div>
+            <div class="truncate">
+              <div class="text-xs font-bold text-white truncate flex items-center gap-1">
+                ${escapeHtml(p.name)}
+                ${isSelf ? '<span class="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-normal">YOU</span>' : ''}
+              </div>
+              <div class="text-[10px] text-emerald-300">
+                ${isCurrentHost ? '👑 Host' : p.isAi ? '🤖 AI Contender' : '🟢 Ready'}
+              </div>
+            </div>
+          </div>
+          ${
+            isHost && p.isAi
+              ? `<button data-remove-ai="${p.id}" title="Remove AI" class="text-red-400 hover:text-red-300 text-xs px-1.5 py-0.5 rounded hover:bg-red-950/50">✕</button>`
+              : ''
+          }
+        `;
+
+        const removeBtn = item.querySelector('[data-remove-ai]');
+        if (removeBtn) {
+          removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            game.removePlayer(p.id);
+          });
+        }
+
+        waitingPlayersList.appendChild(item);
+      });
+
+      // Show empty slots up to playerLimit
+      const emptySlots = Math.max(0, game.playerLimit - game.players.length);
+      for (let i = 0; i < emptySlots; i++) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'flex items-center gap-2 p-2.5 rounded-xl border border-dashed border-white/20 text-white/40 text-xs';
+        placeholder.innerHTML = `
+          <div class="w-8 h-8 rounded-full border border-dashed border-white/20 flex items-center justify-center text-xs">
+            +
+          </div>
+          <span class="text-[11px]">Open Seat...</span>
+        `;
+        waitingPlayersList.appendChild(placeholder);
+      }
+
+      waitingPlayerCountBadge.textContent = `${game.players.length} / ${game.playerLimit} Players`;
+
+      // Hide Add Bot button if full or not host
+      if (!isHost || game.players.length >= game.playerLimit) {
+        waitingAddBotBtn.classList.add('hidden');
+      } else {
+        waitingAddBotBtn.classList.remove('hidden');
+      }
+
+      lucide.createIcons();
+    }
+
+    // Copy Room Code Click
+    waitingCopyCodeBtn.addEventListener('click', async () => {
+      sound.playTick();
+      if (navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(game.roomCode);
+          showAnnouncement("ROOM CODE COPIED!", `Code ${game.roomCode} copied to clipboard!`);
+          return;
+        } catch (e) {}
+      }
+      copyInviteBtn.click();
+    });
+
+    // Copy Full Link Click
+    waitingShareLinkBtn.addEventListener('click', () => {
+      copyInviteBtn.click();
+    });
+
+    // Add AI Bot Click
+    waitingAddBotBtn.addEventListener('click', () => {
+      game.addAiBot();
+    });
+
+    // Start Match Click: Deals cards and transitions all players to the game table
+    waitingStartMatchBtn.addEventListener('click', () => {
+      sound.init();
+      game.startMatch();
+      enterTableUI(game.roomCode);
+    });
+
+    // Cancel / Leave Waiting Room
+    waitingLeaveBtn.addEventListener('click', () => {
+      waitingRoomView.classList.add('hidden');
+      lobbyView.classList.remove('hidden');
+      roomBadgeContainer.classList.add('hidden');
+      roomBadgeContainer.classList.remove('flex');
+      game.status = 'lobby';
+    });
+
+    guestLeaveBtn.addEventListener('click', () => {
+      waitingLeaveBtn.click();
     });
 
     function enterTableUI(roomCode) {
       lobbyView.classList.add('hidden');
+      waitingRoomView.classList.add('hidden');
       gameTableView.classList.remove('hidden');
       roomBadgeContainer.classList.remove('hidden');
       roomBadgeContainer.classList.add('flex');
@@ -1730,10 +2097,10 @@
         game.status = 'lobby';
 
         gameTableView.classList.add('hidden');
+        waitingRoomView.classList.add('hidden');
         lobbyView.classList.remove('hidden');
         roomBadgeContainer.classList.add('hidden');
         roomBadgeContainer.classList.remove('flex');
-        leaveRoomBtn.classList.add('hidden');
       }
     });
 
