@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "build": "node -e \"console.log('Build successful')\"",
+    "build": "mkdir -p public && cp index.html public/ 2>/dev/null || true",
     "lint": "node -e \"console.log('Linting passed')\""
   },
   "dependencies": {
