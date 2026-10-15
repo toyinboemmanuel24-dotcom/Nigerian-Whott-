@@ -56,12 +56,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Confetti for Check Up! celebration -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
-  <!-- Global Real-Time WebSockets Sync (works on Vercel, phones, laptops worldwide) -->
+  <!-- Global Real-Time WebSockets Sync via MQTT (Zero-config, client-side, works everywhere) -->
   <script src="https://unpkg.com/mqtt@5.16.1/dist/mqtt.min.js"></script>
-  <!-- Firebase Compat for direct browser execution -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
     /* Custom game table felt styling */
@@ -907,7 +903,7 @@
     }
 
     // ==========================================
-    // 3. PERSISTENT PLAYER IDENTITY & FIREBASE / P2P CLOUD
+    // 3. PERSISTENT PLAYER IDENTITY & P2P CLOUD
     // ==========================================
     const DEFAULT_AI_NAMES = [
       { name: "Chidi (AI)", avatar: "🇳🇬" },
@@ -929,29 +925,6 @@
 
     // BroadcastChannel for instant local multiplayer sync across browser tabs/windows
     let syncChannel = null;
-    let firestoreUnsubscribe = null;
-    let firestoreDb = null;
-
-    function initFirebase() {
-      try {
-        if (window.firebase && window.firebase.apps && window.firebase.apps.length === 0) {
-          // Provide demo project config for instant seamless cloud functionality
-          const firebaseConfig = {
-            apiKey: "AIzaSyDemoWhotPlaceholderApiKey00000000",
-            authDomain: "nigerian-whot.firebaseapp.com",
-            projectId: "nigerian-whot",
-            storageBucket: "nigerian-whot.appspot.com"
-          };
-          window.firebase.initializeApp(firebaseConfig);
-          firestoreDb = window.firebase.firestore();
-          window.firebase.auth().signInAnonymously().catch(() => {});
-        } else if (window.firebase && window.firebase.firestore) {
-          firestoreDb = window.firebase.firestore();
-        }
-      } catch (err) {
-        console.warn('Firebase initialized in fallback peer mode:', err.message);
-      }
-    }
 
     // ==========================================
     // 4. GAME STATE ENGINE
@@ -1055,40 +1028,13 @@
 
       notifyLobbyState() {
         renderWaitingRoom();
-        if (this.roomCode) {
-          fetch(`/api/rooms/${this.roomCode}/state`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'LOBBY_PLAYERS_UPDATE',
-              payload: {
-                players: this.players,
-                hostId: this.hostId,
-                playerLimit: this.playerLimit
-              }
-            })
-          }).catch(() => {});
-        }
-        if (syncChannel) {
-          try {
-            syncChannel.postMessage({
-              type: 'LOBBY_UPDATE',
-              roomCode: this.roomCode,
-              hostId: this.hostId,
-              playerLimit: this.playerLimit,
-              players: this.players.map(p => ({
-                id: p.id,
-                name: p.name,
-                avatar: p.avatar,
-                isAi: p.isAi,
-                cardCount: 0,
-                cards: [],
-                hasPenaltyStrike: false,
-                score: 0,
-                disqualified: false
-              }))
-            });
-          } catch(e) {}
+        if (typeof broadcastRoomMessage === 'function') {
+          broadcastRoomMessage('LOBBY_STATE_BROADCAST', {
+            players: this.players,
+            hostId: this.hostId,
+            playerLimit: this.playerLimit,
+            status: this.status
+          });
         }
       }
 
@@ -1506,10 +1452,14 @@
       }
 
       broadcastAnnouncement(title, subtitle) {
+      broadcastAnnouncement(title, subtitle, shouldBroadcast = true) {
         showAnnouncement(title, subtitle);
+        if (shouldBroadcast && typeof broadcastRoomMessage === 'function') {
+          broadcastRoomMessage('ANNOUNCEMENT', { title, subtitle });
+        }
       }
 
-      addChatMessage(senderName, text, isBanter = false) {
+      addChatMessage(senderName, text, isBanter = false, shouldBroadcast = true) {
         const msg = {
           id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
           senderName,
@@ -1519,11 +1469,13 @@
         };
         this.chatMessages.push(msg);
         appendChatMessage(msg);
-        this.notifyState();
+        if (shouldBroadcast && typeof broadcastRoomMessage === 'function') {
+          broadcastRoomMessage('CHAT_MESSAGE', msg);
+        }
       }
 
       addSystemChat(text) {
-        this.addChatMessage('Table Master', text, false);
+        this.addChatMessage('Table Master', text, false, true);
       }
 
       notifyState() {
@@ -1543,35 +1495,15 @@
             avatar: p.avatar,
             isAi: p.isAi,
             cardCount: p.cards.length,
-            cards: p.id === myPlayerId ? p.cards : [], // don't expose other hands
+            cards: p.cards,
             hasPenaltyStrike: p.hasPenaltyStrike,
             score: p.score,
             disqualified: p.disqualified
           }))
         };
 
-        if (this.roomCode) {
-          fetch(`/api/rooms/${this.roomCode}/state`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'GAME_STATE',
-              payload
-            })
-          }).catch(() => {});
-        }
-
-        // Sync to BroadcastChannel for local multiplayer tabs
-        if (syncChannel) {
-          try {
-            syncChannel.postMessage({
-              type: 'STATE_UPDATE',
-              roomCode: this.roomCode,
-              payload
-            });
-          } catch (e) {
-            console.warn('Sync post error:', e);
-          }
+        if (typeof broadcastRoomMessage === 'function') {
+          broadcastRoomMessage('GAME_STATE', payload);
         }
       }
     }
@@ -1885,12 +1817,14 @@
     }
 
     // ==========================================
-    // 7. REAL-TIME CROSS-DEVICE MESSAGING (MQTT + SSE + BC)
     // ==========================================
-    let sseSource = null;
+    // 7. REAL-TIME CROSS-DEVICE MESSAGING (MQTT & BROADCASTCHANNEL)
+    // ==========================================
     let mqttClient = null;
 
     function broadcastRoomMessage(type, data) {
+      if (!game.roomCode) return;
+
       const payload = {
         type,
         data,
@@ -1903,23 +1837,16 @@
       if (mqttClient && mqttClient.connected) {
         try {
           mqttClient.publish(
-            `naija_whot_v5/rooms/${game.roomCode}`,
+            `whot/room/${game.roomCode}`,
             JSON.stringify(payload),
             { qos: 1 }
           );
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[MQTT] Publish note:', e);
+        }
       }
 
-      // 2. Send via Backend Server API
-      if (game.roomCode) {
-        fetch(`/api/rooms/${game.roomCode}/state`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: type, payload: data })
-        }).catch(() => {});
-      }
-
-      // 3. Local BroadcastChannel
+      // 2. Local BroadcastChannel for same-device tabs
       if (syncChannel) {
         try {
           syncChannel.postMessage(payload);
@@ -1930,12 +1857,9 @@
     function handleIncomingRoomMessage(type, data, senderId) {
       if (!data || senderId === myPlayerId) return;
 
-      if (type === 'PLAYER_JOINED' || type === 'PLAYER_JOIN_REQUEST') {
+      if (type === 'PLAYER_JOIN_REQUEST' || type === 'PLAYER_JOINED') {
         const newPlayer = data.newPlayer || data.player || data;
         if (newPlayer && newPlayer.id && newPlayer.id !== myPlayerId) {
-          sound.playDealSnap();
-          showAnnouncement("PLAYER JOINED! 🎉", `${newPlayer.name || 'Friend'} joined the table!`);
-
           // If we are Host, add to room roster
           if (game.hostId === myPlayerId) {
             const exists = game.players.some(p => p.id === newPlayer.id);
@@ -1959,48 +1883,87 @@
                   disqualified: false
                 });
               }
+            } else {
+              const p = game.players.find(p => p.id === newPlayer.id);
+              if (p && newPlayer.name) p.name = newPlayer.name;
             }
 
-            // Immediately broadcast authoritative lobby state to all devices
+            sound.playDealSnap();
+            showAnnouncement("PLAYER JOINED! 🎉", `${newPlayer.name || 'Friend'} joined the table!`);
+            renderWaitingRoom();
+
+            // Broadcast updated authoritative lobby state to all devices
             broadcastRoomMessage('LOBBY_STATE_BROADCAST', {
               players: game.players,
               hostId: game.hostId,
-              playerLimit: game.playerLimit
+              playerLimit: game.playerLimit,
+              status: game.status
             });
+
+            // If match is already playing, send current match state so guest can join in
+            if (game.status === 'playing') {
+              game.notifyState();
+            }
           }
         }
-
-        if (data.players) {
-          game.players = data.players;
-        }
-        if (data.hostId) game.hostId = data.hostId;
-        if (data.playerLimit) game.playerLimit = data.playerLimit;
-        if (game.status === 'waiting') {
-          renderWaitingRoom();
-        }
-      } else if (type === 'LOBBY_STATE_BROADCAST' || type === 'ROOM_UPDATED' || type === 'LOBBY_UPDATE' || type === 'ROOM_SYNC') {
+      } else if (type === 'LOBBY_STATE_BROADCAST' || type === 'ROOM_UPDATED' || type === 'LOBBY_UPDATE') {
         const players = data.players || (data.payload && data.payload.players);
-        if (players) {
+        if (players && players.length > 0) {
           game.players = players;
         }
         if (data.hostId) game.hostId = data.hostId;
         if (data.playerLimit) game.playerLimit = data.playerLimit;
-        if (game.status === 'waiting') {
+        if (game.status === 'waiting' || !game.status || game.status === 'lobby') {
+          game.status = 'waiting';
           renderWaitingRoom();
         }
       } else if (type === 'START_MATCH' || type === 'MATCH_STARTED') {
         const payload = data.payload || data;
         applyRemoteState(payload);
         enterTableUI(game.roomCode);
-      } else if (type === 'GAME_STATE' || type === 'STATE_UPDATE' || type === 'GAME_STATE_UPDATE') {
+      } else if (type === 'GAME_STATE' || type === 'STATE_UPDATE') {
         const payload = data.payload || data;
         applyRemoteState(payload);
+      } else if (type === 'PLAYER_ACTION') {
+        // Host executes guest player actions
+        if (game.hostId === myPlayerId && data) {
+          const { action, playerId, cardId, declaredShape } = data;
+          const playerIdx = game.players.findIndex(p => p.id === playerId);
+          if (playerIdx !== -1 && game.currentTurnIndex === playerIdx) {
+            if (action === 'PLAY_CARD') {
+              game.playCard(playerIdx, cardId, declaredShape);
+            } else if (action === 'DRAW_CARD') {
+              game.drawCardForPlayer(playerIdx, 1);
+              game.lastAction = `${game.players[playerIdx].name} drew a card from General Market.`;
+              game.advanceTurn(1);
+            }
+          }
+        }
+      } else if (type === 'CHAT_MESSAGE') {
+        if (data && data.text) {
+          game.addChatMessage(data.senderName || 'Player', data.text, data.isBanter, false);
+          sound.playTick();
+        }
+      } else if (type === 'ANNOUNCEMENT') {
+        if (data && data.title) {
+          showAnnouncement(data.title, data.subtitle || '');
+        }
+      } else if (type === 'SYNC_REQUEST') {
+        if (game.hostId === myPlayerId) {
+          if (game.status === 'waiting') {
+            game.notifyLobbyState();
+          } else if (game.status === 'playing') {
+            game.notifyState();
+          }
+        }
       }
     }
 
     function setupRoomChannel(roomCode) {
       // 1. Local BroadcastChannel
-      if (syncChannel) syncChannel.close();
+      if (syncChannel) {
+        try { syncChannel.close(); } catch (e) {}
+      }
       try {
         syncChannel = new BroadcastChannel(`whot_room_${roomCode}`);
         syncChannel.onmessage = (event) => {
@@ -2009,60 +1972,62 @@
         };
       } catch (e) {}
 
-      // 2. Server-Sent Events (SSE)
-      if (sseSource) {
-        sseSource.close();
-        sseSource = null;
-      }
-      try {
-        sseSource = new EventSource(`/api/rooms/${roomCode}/stream`);
-        sseSource.onmessage = (event) => {
-          try {
-            const parsed = JSON.parse(event.data);
-            handleIncomingRoomMessage(parsed.type, parsed.data);
-          } catch (err) {}
-        };
-      } catch (e) {}
-
-      // 3. Global MQTT over WebSockets (Zero-config, works everywhere on phones, Vercel, laptops)
+      // 2. Global MQTT over WebSockets
       if (mqttClient) {
-        try { mqttClient.end(); } catch (e) {}
+        try { mqttClient.end(true); } catch (e) {}
         mqttClient = null;
       }
+
       if (window.mqtt) {
         try {
-          const topic = `naija_whot_v5/rooms/${roomCode}`;
+          const topic = `whot/room/${roomCode}`;
+          const clientId = 'whot_' + myPlayerId + '_' + Math.random().toString(36).substring(2, 6);
           mqttClient = window.mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
-            clientId: 'whot_' + Math.random().toString(36).substring(2, 9),
+            clientId,
             keepalive: 30,
             clean: true,
-            reconnectPeriod: 2000
+            reconnectPeriod: 2500,
+            connectTimeout: 8000
           });
 
           mqttClient.on('connect', () => {
-            console.log('[MQTT] Connected to global broker for room:', roomCode);
-            mqttClient.subscribe(topic, { qos: 1 });
-
-            // If we are a joining guest, immediately ask host to send lobby state!
-            if (game.hostId !== myPlayerId) {
-              broadcastRoomMessage('PLAYER_JOIN_REQUEST', {
-                newPlayer: { id: myPlayerId, name: myPlayerName, avatar: '👤' }
-              });
-            }
+            console.log('[MQTT] Connected to room topic:', topic);
+            mqttClient.subscribe(topic, { qos: 1 }, (err) => {
+              if (!err) {
+                // If we are a joining guest, immediately ask host to send lobby state!
+                if (game.hostId !== myPlayerId) {
+                  broadcastRoomMessage('PLAYER_JOIN_REQUEST', {
+                    newPlayer: { id: myPlayerId, name: myPlayerName, avatar: '👤' }
+                  });
+                } else {
+                  // Host announces lobby state
+                  broadcastRoomMessage('LOBBY_STATE_BROADCAST', {
+                    players: game.players,
+                    hostId: game.hostId,
+                    playerLimit: game.playerLimit,
+                    status: game.status
+                  });
+                }
+              }
+            });
           });
 
           mqttClient.on('message', (t, msgBuffer) => {
             if (t === topic) {
               try {
                 const parsed = JSON.parse(msgBuffer.toString());
-                if (parsed.senderId !== myPlayerId) {
+                if (parsed && parsed.senderId !== myPlayerId) {
                   handleIncomingRoomMessage(parsed.type, parsed.data, parsed.senderId);
                 }
               } catch (e) {}
             }
           });
+
+          mqttClient.on('error', (err) => {
+            console.warn('[MQTT] Connection note:', err?.message || err);
+          });
         } catch (e) {
-          console.warn('[MQTT] Error initializing broker:', e);
+          console.warn('[MQTT] Init notice:', e);
         }
       }
     }
@@ -2109,7 +2074,7 @@
     }
 
     // Host Room Click: Generates code and opens Waiting Lounge first!
-    startHostBtn.addEventListener('click', async () => {
+    startHostBtn.addEventListener('click', () => {
       sound.init();
       myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
       localStorage.setItem('whot_player_name', myPlayerName);
@@ -2118,22 +2083,8 @@
       const fillAi = allowBotsInput ? allowBotsInput.value === 'true' : false;
       const roomCode = generateRoomCode();
 
-      setupRoomChannel(roomCode);
       game.initWaitingLobby(roomCode, myPlayerId, myPlayerName, limit, fillAi);
-
-      // Register room with backend
-      try {
-        await fetch(`/api/rooms/${roomCode}/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            hostId: myPlayerId,
-            hostName: myPlayerName,
-            playerLimit: limit
-          })
-        });
-      } catch (e) {}
-
+      setupRoomChannel(roomCode);
       enterWaitingLobbyUI(roomCode, true);
     });
 
@@ -2144,59 +2095,42 @@
       localStorage.setItem('whot_player_name', myPlayerName);
 
       const roomCode = generateRoomCode();
-      setupRoomChannel(roomCode);
       game.initRoom(roomCode, myPlayerId, myPlayerName, 2, true);
-
+      setupRoomChannel(roomCode);
       enterTableUI(roomCode);
     });
 
     // Join Match Click: Joins waiting lobby across any device
-    submitJoinBtn.addEventListener('click', async () => {
+    submitJoinBtn.addEventListener('click', () => {
       sound.init();
       const code = joinCodeInput.value.trim().toUpperCase();
       if (!code) {
-        alert('Please enter a room code');
+        showAnnouncement("ROOM CODE NEEDED", "Please enter a valid room code!");
+        sound.playBuzzer();
         return;
       }
       myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
       localStorage.setItem('whot_player_name', myPlayerName);
 
-      setupRoomChannel(code);
       game.roomCode = code;
+      game.initWaitingLobby(code, 'host_' + code, myPlayerName, 4, false);
+      game.players[0].id = myPlayerId;
+      game.players[0].name = myPlayerName;
 
-      // Join room via backend API
-      try {
-        const resp = await fetch(`/api/rooms/${code}/join`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: myPlayerId,
-            name: myPlayerName,
-            avatar: '🇳🇬'
-          })
-        });
-        const result = await resp.json();
-        if (result.success) {
-          game.hostId = result.hostId || 'host_' + code;
-          game.players = result.players;
-          if (result.state && result.state.status === 'playing') {
-            applyRemoteState(result.state);
-            enterTableUI(code);
-            return;
-          }
-        }
-      } catch (e) {
-        game.initWaitingLobby(code, 'host_' + code, myPlayerName, 4, false);
-        game.players[0].id = myPlayerId;
-        game.players[0].name = myPlayerName;
-      }
-
+      setupRoomChannel(code);
       enterWaitingLobbyUI(code, false);
 
       // Broadcast join request to host across MQTT & BroadcastChannel
       broadcastRoomMessage('PLAYER_JOIN_REQUEST', {
         newPlayer: { id: myPlayerId, name: myPlayerName, avatar: '👤' }
       });
+
+      // Retry once after 600ms in case broker connection was in handshake
+      setTimeout(() => {
+        broadcastRoomMessage('PLAYER_JOIN_REQUEST', {
+          newPlayer: { id: myPlayerId, name: myPlayerName, avatar: '👤' }
+        });
+      }, 600);
     });
 
     function enterWaitingLobbyUI(roomCode, isHost = true) {
@@ -2327,7 +2261,7 @@
     });
 
     // Start Match Click: Deals cards and transitions all players to the game table
-    waitingStartMatchBtn.addEventListener('click', async () => {
+    waitingStartMatchBtn.addEventListener('click', () => {
       sound.init();
       game.startMatch();
 
@@ -2346,23 +2280,16 @@
           avatar: p.avatar,
           isAi: p.isAi,
           cardCount: p.cards.length,
-          cards: [],
+          cards: p.cards,
           hasPenaltyStrike: p.hasPenaltyStrike,
           score: p.score,
           disqualified: p.disqualified
         }))
       };
 
-      try {
-        await fetch(`/api/rooms/${game.roomCode}/state`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'START_MATCH',
-            payload: matchPayload
-          })
-        });
-      } catch (e) {}
+      if (typeof broadcastRoomMessage === 'function') {
+        broadcastRoomMessage('START_MATCH', matchPayload);
+      }
 
       enterTableUI(game.roomCode);
     });
@@ -2596,7 +2523,22 @@
             return;
           }
 
-          game.playCard(game.currentTurnIndex, card.id);
+          if (card.number === 20 || card.suit === 'Whot') {
+            game.pendingWhotCard = card;
+            openWhotModal();
+            return;
+          }
+
+          if (game.hostId === myPlayerId) {
+            game.playCard(game.currentTurnIndex, card.id);
+          } else {
+            broadcastRoomMessage('PLAYER_ACTION', {
+              action: 'PLAY_CARD',
+              playerId: myPlayerId,
+              cardId: card.id,
+              declaredShape: null
+            });
+          }
         });
 
         userHandContainer.appendChild(cardEl);
@@ -2612,9 +2554,16 @@
         return;
       }
 
-      game.drawCardForPlayer(game.currentTurnIndex, 1);
-      game.lastAction = `${game.currentPlayer.name} drew a card from the General Market.`;
-      game.advanceTurn(1);
+      if (game.hostId === myPlayerId) {
+        game.drawCardForPlayer(game.currentTurnIndex, 1);
+        game.lastAction = `${game.currentPlayer.name} drew a card from the General Market.`;
+        game.advanceTurn(1);
+      } else {
+        broadcastRoomMessage('PLAYER_ACTION', {
+          action: 'DRAW_CARD',
+          playerId: myPlayerId
+        });
+      }
     });
 
     // Shout "Last Card!" manually
@@ -2640,7 +2589,16 @@
         if (game.pendingWhotCard) {
           const cardId = game.pendingWhotCard.id;
           game.pendingWhotCard = null;
-          game.playCard(game.currentTurnIndex, cardId, declared);
+          if (game.hostId === myPlayerId) {
+            game.playCard(game.currentTurnIndex, cardId, declared);
+          } else {
+            broadcastRoomMessage('PLAYER_ACTION', {
+              action: 'PLAY_CARD',
+              playerId: myPlayerId,
+              cardId: cardId,
+              declaredShape: declared
+            });
+          }
         }
       });
     });
@@ -2746,7 +2704,6 @@
     // 9. BOOTSTRAP APPLICATION
     // ==========================================
     window.addEventListener('DOMContentLoaded', () => {
-      initFirebase();
       checkUrlRoomParam();
       lucide.createIcons();
     });
