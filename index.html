@@ -1032,6 +1032,20 @@
 
       notifyLobbyState() {
         renderWaitingRoom();
+        if (this.roomCode) {
+          fetch(`/api/rooms/${this.roomCode}/state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'LOBBY_PLAYERS_UPDATE',
+              payload: {
+                players: this.players,
+                hostId: this.hostId,
+                playerLimit: this.playerLimit
+              }
+            })
+          }).catch(() => {});
+        }
         if (syncChannel) {
           try {
             syncChannel.postMessage({
@@ -1491,33 +1505,46 @@
 
       notifyState() {
         renderGameTable();
+        const payload = {
+          deckCount: this.deck.length,
+          discardPile: this.discardPile,
+          currentTurnIndex: this.currentTurnIndex,
+          activeShape: this.activeShape,
+          lastAction: this.lastAction,
+          status: this.status,
+          turnDuration: this.turnDuration,
+          timerStart: this.timerStart,
+          players: this.players.map(p => ({
+            id: p.id,
+            name: p.name,
+            avatar: p.avatar,
+            isAi: p.isAi,
+            cardCount: p.cards.length,
+            cards: p.id === myPlayerId ? p.cards : [], // don't expose other hands
+            hasPenaltyStrike: p.hasPenaltyStrike,
+            score: p.score,
+            disqualified: p.disqualified
+          }))
+        };
+
+        if (this.roomCode) {
+          fetch(`/api/rooms/${this.roomCode}/state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'GAME_STATE',
+              payload
+            })
+          }).catch(() => {});
+        }
+
         // Sync to BroadcastChannel for local multiplayer tabs
         if (syncChannel) {
           try {
             syncChannel.postMessage({
               type: 'STATE_UPDATE',
               roomCode: this.roomCode,
-              payload: {
-                deckCount: this.deck.length,
-                discardPile: this.discardPile,
-                currentTurnIndex: this.currentTurnIndex,
-                activeShape: this.activeShape,
-                lastAction: this.lastAction,
-                status: this.status,
-                turnDuration: this.turnDuration,
-                timerStart: this.timerStart,
-                players: this.players.map(p => ({
-                  id: p.id,
-                  name: p.name,
-                  avatar: p.avatar,
-                  isAi: p.isAi,
-                  cardCount: p.cards.length,
-                  cards: p.id === myPlayerId ? p.cards : [], // don't expose other hands
-                  hasPenaltyStrike: p.hasPenaltyStrike,
-                  score: p.score,
-                  disqualified: p.disqualified
-                }))
-              }
+              payload
             });
           } catch (e) {
             console.warn('Sync post error:', e);
@@ -1778,6 +1805,7 @@
       if (room) {
         tabJoinBtn.click();
         joinCodeInput.value = room.toUpperCase();
+        showAnnouncement("TABLE INVITE! 🃏", `You were invited to table ${room.toUpperCase()}! Tap 'Enter Table' to join!`);
       }
     }
 
@@ -1800,72 +1828,125 @@
     // ==========================================
     // 7. ROOM LAUNCH & PEER SYNC
     // ==========================================
+    // ==========================================
+    // 7. ROOM LAUNCH & CROSS-DEVICE REAL-TIME SYNC
+    // ==========================================
+    let sseSource = null;
+
+    function handleIncomingRoomMessage(type, data) {
+      if (!data) return;
+
+      if (type === 'PLAYER_JOINED') {
+        const newPlayer = data.newPlayer;
+        if (newPlayer && newPlayer.id !== myPlayerId) {
+          sound.playDealSnap();
+          showAnnouncement("PLAYER JOINED! 🎉", `${newPlayer.name} entered the waiting lobby!`);
+        }
+        if (data.players) {
+          game.players = data.players;
+        }
+        if (data.hostId) game.hostId = data.hostId;
+        if (data.playerLimit) game.playerLimit = data.playerLimit;
+        if (game.status === 'waiting') {
+          renderWaitingRoom();
+        }
+      } else if (type === 'ROOM_UPDATED' || type === 'LOBBY_UPDATE' || type === 'ROOM_SYNC' || type === 'LOBBY_PLAYERS_UPDATE') {
+        const players = data.players || (data.payload && data.payload.players);
+        if (players) game.players = players;
+        if (data.hostId) game.hostId = data.hostId;
+        if (data.playerLimit) game.playerLimit = data.playerLimit;
+        if (game.status === 'waiting') {
+          renderWaitingRoom();
+        }
+      } else if (type === 'START_MATCH' || type === 'MATCH_STARTED') {
+        const payload = data.payload || data;
+        applyRemoteState(payload);
+        enterTableUI(game.roomCode);
+      } else if (type === 'GAME_STATE' || type === 'STATE_UPDATE') {
+        const payload = data.payload || data;
+        applyRemoteState(payload);
+      }
+    }
+
     function setupRoomChannel(roomCode) {
       if (syncChannel) syncChannel.close();
-      syncChannel = new BroadcastChannel(`whot_room_${roomCode}`);
-      syncChannel.onmessage = (event) => {
-        if (!event.data || event.data.roomCode !== game.roomCode) return;
+      try {
+        syncChannel = new BroadcastChannel(`whot_room_${roomCode}`);
+        syncChannel.onmessage = (event) => {
+          if (!event.data || event.data.roomCode !== game.roomCode) return;
+          handleIncomingRoomMessage(event.data.type, event.data.payload || event.data);
+        };
+      } catch (e) {}
 
-        if (event.data.type === 'LOBBY_UPDATE') {
-          // A guest or host joined/updated the lobby
-          game.hostId = event.data.hostId;
-          game.playerLimit = event.data.playerLimit;
-          game.players = event.data.players;
-          if (game.status === 'waiting') {
-            renderWaitingRoom();
+      // Server-Sent Events (SSE) for internet cross-device sync!
+      if (sseSource) {
+        sseSource.close();
+        sseSource = null;
+      }
+
+      try {
+        sseSource = new EventSource(`/api/rooms/${roomCode}/stream`);
+        sseSource.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data);
+            handleIncomingRoomMessage(parsed.type, parsed.data);
+          } catch (err) {
+            console.warn('Error parsing SSE event:', err);
           }
-        } else if (event.data.type === 'MATCH_STARTED') {
-          // Host started the match! Transition everyone to game table
-          applyRemoteState(event.data.payload);
-          enterTableUI(game.roomCode);
-        } else if (event.data.type === 'STATE_UPDATE') {
-          applyRemoteState(event.data.payload);
-        }
-      };
+        };
+        sseSource.onerror = () => {
+          // EventSource automatically handles reconnection
+        };
+      } catch (e) {
+        console.warn('SSE not available:', e);
+      }
     }
 
     function applyRemoteState(payload) {
+      if (!payload) return;
       // Update local game object
-      game.deck.length = payload.deckCount;
-      game.discardPile = payload.discardPile;
-      game.currentTurnIndex = payload.currentTurnIndex;
-      game.activeShape = payload.activeShape;
-      game.lastAction = payload.lastAction;
-      game.status = payload.status;
-      game.turnDuration = payload.turnDuration;
-      game.timerStart = payload.timerStart;
+      if (typeof payload.deckCount === 'number') game.deck.length = payload.deckCount;
+      if (payload.discardPile) game.discardPile = payload.discardPile;
+      if (typeof payload.currentTurnIndex === 'number') game.currentTurnIndex = payload.currentTurnIndex;
+      if (payload.activeShape) game.activeShape = payload.activeShape;
+      if (payload.lastAction) game.lastAction = payload.lastAction;
+      if (payload.status) game.status = payload.status;
+      if (payload.turnDuration) game.turnDuration = payload.turnDuration;
+      if (payload.timerStart) game.timerStart = payload.timerStart;
 
       // Update players while retaining our private cards
-      payload.players.forEach(remoteP => {
-        const localP = game.players.find(p => p.id === remoteP.id);
-        if (localP) {
-          localP.cardCount = remoteP.cardCount;
-          localP.hasPenaltyStrike = remoteP.hasPenaltyStrike;
-          localP.score = remoteP.score;
-          localP.disqualified = remoteP.disqualified;
-          if (localP.id === myPlayerId && remoteP.cards && remoteP.cards.length > 0) {
-            localP.cards = remoteP.cards;
+      if (payload.players) {
+        payload.players.forEach(remoteP => {
+          const localP = game.players.find(p => p.id === remoteP.id);
+          if (localP) {
+            localP.cardCount = remoteP.cardCount;
+            localP.hasPenaltyStrike = remoteP.hasPenaltyStrike;
+            localP.score = remoteP.score;
+            localP.disqualified = remoteP.disqualified;
+            if (localP.id === myPlayerId && remoteP.cards && remoteP.cards.length > 0) {
+              localP.cards = remoteP.cards;
+            }
+          } else {
+            game.players.push({
+              id: remoteP.id,
+              name: remoteP.name,
+              avatar: remoteP.avatar,
+              isAi: remoteP.isAi,
+              cardCount: remoteP.cardCount,
+              cards: remoteP.id === myPlayerId ? (remoteP.cards || []) : [],
+              hasPenaltyStrike: remoteP.hasPenaltyStrike,
+              score: remoteP.score,
+              disqualified: remoteP.disqualified
+            });
           }
-        } else {
-          game.players.push({
-            id: remoteP.id,
-            name: remoteP.name,
-            avatar: remoteP.avatar,
-            isAi: remoteP.isAi,
-            cardCount: remoteP.cardCount,
-            cards: remoteP.id === myPlayerId ? (remoteP.cards || []) : [],
-            hasPenaltyStrike: remoteP.hasPenaltyStrike,
-            score: remoteP.score,
-            disqualified: remoteP.disqualified
-          });
-        }
-      });
+        });
+      }
 
       renderGameTable();
     }
 
     // Host Room Click: Generates code and opens Waiting Lounge first!
-    startHostBtn.addEventListener('click', () => {
+    startHostBtn.addEventListener('click', async () => {
       sound.init();
       myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
       localStorage.setItem('whot_player_name', myPlayerName);
@@ -1876,6 +1957,21 @@
 
       setupRoomChannel(roomCode);
       game.initWaitingLobby(roomCode, myPlayerId, myPlayerName, limit, fillAi);
+
+      // Register room with backend
+      try {
+        await fetch(`/api/rooms/${roomCode}/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId: myPlayerId,
+            hostName: myPlayerName,
+            playerLimit: limit
+          })
+        });
+      } catch (e) {
+        console.warn('API create room fallback:', e);
+      }
 
       enterWaitingLobbyUI(roomCode, true);
     });
@@ -1893,8 +1989,8 @@
       enterTableUI(roomCode);
     });
 
-    // Join Match Click: Joins waiting lobby
-    submitJoinBtn.addEventListener('click', () => {
+    // Join Match Click: Joins waiting lobby across any device
+    submitJoinBtn.addEventListener('click', async () => {
       sound.init();
       const code = joinCodeInput.value.trim().toUpperCase();
       if (!code) {
@@ -1906,15 +2002,38 @@
 
       setupRoomChannel(code);
       game.roomCode = code;
-      game.initWaitingLobby(code, 'host_' + code, myPlayerName, 4, false);
 
-      // Add our self as guest
-      game.players[0].id = myPlayerId;
-      game.players[0].name = myPlayerName;
+      // Join room via backend API
+      try {
+        const resp = await fetch(`/api/rooms/${code}/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: myPlayerId,
+            name: myPlayerName,
+            avatar: '🇳🇬'
+          })
+        });
+        const result = await resp.json();
+        if (result.success) {
+          game.hostId = result.hostId || 'host_' + code;
+          game.players = result.players;
+          if (result.state && result.state.status === 'playing') {
+            applyRemoteState(result.state);
+            enterTableUI(code);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Join fetch fallback:', e);
+        game.initWaitingLobby(code, 'host_' + code, myPlayerName, 4, false);
+        game.players[0].id = myPlayerId;
+        game.players[0].name = myPlayerName;
+      }
 
       enterWaitingLobbyUI(code, false);
 
-      // Broadcast presence to room
+      // Local broadcast fallback
       if (syncChannel) {
         syncChannel.postMessage({
           type: 'LOBBY_UPDATE',
@@ -2054,9 +2173,43 @@
     });
 
     // Start Match Click: Deals cards and transitions all players to the game table
-    waitingStartMatchBtn.addEventListener('click', () => {
+    waitingStartMatchBtn.addEventListener('click', async () => {
       sound.init();
       game.startMatch();
+
+      const matchPayload = {
+        deckCount: game.deck.length,
+        discardPile: game.discardPile,
+        currentTurnIndex: game.currentTurnIndex,
+        activeShape: game.activeShape,
+        lastAction: game.lastAction,
+        status: game.status,
+        turnDuration: game.turnDuration,
+        timerStart: game.timerStart,
+        players: game.players.map(p => ({
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          isAi: p.isAi,
+          cardCount: p.cards.length,
+          cards: [],
+          hasPenaltyStrike: p.hasPenaltyStrike,
+          score: p.score,
+          disqualified: p.disqualified
+        }))
+      };
+
+      try {
+        await fetch(`/api/rooms/${game.roomCode}/state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'START_MATCH',
+            payload: matchPayload
+          })
+        });
+      } catch (e) {}
+
       enterTableUI(game.roomCode);
     });
 
