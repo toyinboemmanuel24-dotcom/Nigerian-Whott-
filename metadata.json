@@ -1,0 +1,8 @@
+{
+  "name": "Nigerian Whot! Multiplayer",
+  "description": "Authentic real-time multiplayer Nigerian Whot card game with Naija banter, AI contenders, custom timers, and voice simulation.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

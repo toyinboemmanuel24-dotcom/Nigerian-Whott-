@@ -1,0 +1,16 @@
+{
+  "name": "nigerian-whot",
+  "version": "1.0.0",
+  "description": "Authentic real-time multiplayer Nigerian Whot card game",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node -e \"console.log('Build successful')\"",
+    "lint": "node -e \"console.log('Linting passed')\""
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

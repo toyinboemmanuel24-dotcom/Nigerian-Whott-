@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "Multiplayer Nigerian Whot game room state",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string", "maxLength": 32 },
+        "hostId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["waiting", "in_progress", "finished"] },
+        "playerLimit": { "type": "number" },
+        "currentTurnIndex": { "type": "number" },
+        "marketCount": { "type": "number" },
+        "activeShape": { "type": "string", "enum": ["Circle", "Triangle", "Cross", "Square", "Star", "None"] },
+        "timerStart": { "type": "number" },
+        "timerDuration": { "type": "number" },
+        "lastAction": { "type": "string", "maxLength": 256 },
+        "winner": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomId", "hostId", "status", "playerLimit"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Banter and live chat messages inside a game room",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 64 },
+        "text": { "type": "string", "maxLength": 280 },
+        "timestamp": { "type": "number" },
+        "isQuickBanter": { "type": "boolean" }
+      },
+      "required": ["senderId", "senderName", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Game room synchronization document"
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Chat messages within a room"
+    }
+  }
+}

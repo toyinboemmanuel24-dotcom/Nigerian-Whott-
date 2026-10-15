@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nigerian Whot! Multiplayer</title>
+  <meta name="description" content="Authentic real-time multiplayer Nigerian Whot card game with Naija banter, AI contenders, custom timers, and voice simulation.">
+  <meta property="og:title" content="Nigerian Whot! Multiplayer">
+  <meta property="og:description" content="Authentic real-time multiplayer Nigerian Whot card game with Naija banter, AI contenders, custom timers, and voice simulation.">
+  <meta property="og:type" content="website">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            naija: {
+              green: '#008751',
+              darkgreen: '#06381e',
+              emerald: '#052917',
+              gold: '#f59e0b',
+              accent: '#fbbf24',
+              felt: '#0a4224'
+            }
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { boxShadow: '0 0 15px rgba(251, 191, 36, 0.7)' },
+              '50%': { boxShadow: '0 0 25px rgba(251, 191, 36, 1)' }
+            },
+            dealIn: {
+              '0%': { transform: 'scale(0.5) translateY(-60px)', opacity: '0' },
+              '100%': { transform: 'scale(1) translateY(0)', opacity: '1' }
+            },
+            voiceBar: {
+              '0%, 100%': { height: '4px' },
+              '50%': { height: '18px' }
+            }
+          },
+          animation: {
+            pulseGlow: 'pulseGlow 1.8s infinite',
+            dealIn: 'dealIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            voiceBar1: 'voiceBar 0.6s ease-in-out infinite',
+            voiceBar2: 'voiceBar 0.4s ease-in-out infinite 0.15s',
+            voiceBar3: 'voiceBar 0.5s ease-in-out infinite 0.3s'
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Confetti for Check Up! celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <!-- Firebase Compat for direct browser execution -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* Custom game table felt styling */
+    body {
+      background: radial-gradient(circle at center, #0e4c2b 0%, #062b17 65%, #03140a 100%);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    
+    .whot-felt {
+      background: radial-gradient(circle at center, rgba(0, 135, 81, 0.25) 0%, rgba(3, 20, 10, 0.8) 100%);
+      box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(251, 191, 36, 0.4);
+      border-radius: 9999px;
+    }
+
+    /* 3D card tilt & hover */
+    .whot-card {
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s;
+    }
+    .whot-card-playable:hover {
+      transform: translateY(-16px) scale(1.05);
+      z-index: 40 !important;
+    }
+
+    /* Modal Backdrop */
+    .glass-modal {
+      background: rgba(4, 25, 14, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+  </style>
+</head>
+<body class="text-white min-h-screen flex flex-col overflow-hidden font-sans antialiased">
+
+  <!-- TOP HEADER / NAV BAR -->
+  <header class="h-14 border-b border-white/10 bg-black/40 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between shrink-0 z-30">
+    <div class="flex items-center gap-2 sm:gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-emerald-500 flex items-center justify-center font-black text-black shadow-lg text-lg">
+        W!
+      </div>
+      <div>
+        <h1 class="text-sm sm:text-base font-extrabold tracking-wide flex items-center gap-1.5 text-white">
+          NAIJA WHOT!
+          <span class="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">Pro</span>
+        </h1>
+        <p class="text-[10px] text-emerald-300/70 hidden sm:block">National Card Game of Nigeria</p>
+      </div>
+    </div>
+
+    <!-- Active Room Badge & Action Controls -->
+    <div class="flex items-center gap-1.5 sm:gap-3">
+      <!-- Room Code Badge (when in game) -->
+      <div id="roomBadgeContainer" class="hidden items-center bg-black/50 border border-emerald-500/40 rounded-lg px-2 sm:px-3 py-1 text-xs">
+        <span class="text-white/60 mr-1.5 hidden sm:inline">Room:</span>
+        <span id="roomCodeDisplay" class="font-mono font-bold text-amber-400 tracking-wider">------</span>
+        <button id="copyInviteBtn" title="Copy Invite Link" class="ml-2 text-emerald-400 hover:text-white transition">
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+      <!-- Voice UI Simulation Controls -->
+      <div class="flex items-center bg-black/40 border border-white/10 rounded-lg p-0.5">
+        <button id="micToggleBtn" title="Simulate Mic" class="p-1.5 rounded-md text-white/50 hover:text-white transition flex items-center gap-1">
+          <i data-lucide="mic" class="w-4 h-4"></i>
+          <div id="micVisualizer" class="hidden items-center gap-0.5 h-3.5 px-1">
+            <span class="w-0.5 bg-emerald-400 animate-voiceBar1"></span>
+            <span class="w-0.5 bg-emerald-400 animate-voiceBar2"></span>
+            <span class="w-0.5 bg-emerald-400 animate-voiceBar3"></span>
+          </div>
+        </button>
+        <button id="speakerToggleBtn" title="Sound Effects" class="p-1.5 rounded-md text-emerald-400 hover:text-white transition">
+          <i data-lucide="volume-2" id="speakerIcon" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Chat Drawer Trigger Button -->
+      <button id="chatToggleBtn" class="relative p-1.5 rounded-lg bg-black/40 border border-white/10 text-white/80 hover:text-white hover:border-amber-400/50 transition flex items-center gap-1.5">
+        <i data-lucide="message-square" class="w-4 h-4"></i>
+        <span class="text-xs font-semibold hidden sm:inline">Banter</span>
+        <span id="chatUnreadDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping"></span>
+      </button>
+
+      <!-- Rules / Help Button -->
+      <button id="rulesBtn" title="Rules & Card Powers" class="p-1.5 rounded-lg bg-black/40 border border-white/10 text-white/70 hover:text-white transition">
+        <i data-lucide="help-circle" class="w-4 h-4"></i>
+      </button>
+
+      <!-- Leave Room / Home Button (when in room) -->
+      <button id="leaveRoomBtn" class="hidden p-1.5 rounded-lg bg-red-900/30 border border-red-500/40 text-red-300 hover:bg-red-900/60 hover:text-white transition text-xs font-bold px-2">
+        Exit
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN VIEW CONTAINER -->
+  <main class="flex-1 relative flex flex-col overflow-hidden">
+
+    <!-- LOBBY VIEW (Visible when not in a game) -->
+    <div id="lobbyView" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+      <div class="max-w-md w-full bg-black/60 backdrop-blur-xl border border-white/15 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+        <div class="absolute -right-12 -top-12 w-40 h-40 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-12 -bottom-12 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center p-3 rounded-2xl bg-gradient-to-br from-emerald-600 to-green-900 border border-emerald-400/40 shadow-xl mb-3">
+            <!-- 5 Suits icon showcase -->
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+              <svg class="w-5 h-5 text-emerald-300" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 22,21 2,21"/></svg>
+              <svg class="w-5 h-5 text-rose-400" viewBox="0 0 24 24" fill="currentColor"><path d="M10 2h4v8h8v4h-8v8h-4v-8H2v-4h8z"/></svg>
+              <svg class="w-5 h-5 text-sky-400" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+              <svg class="w-5 h-5 text-yellow-300" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/></svg>
+            </div>
+          </div>
+          <h2 class="text-2xl font-black tracking-tight text-white">NIGERIAN WHOT!</h2>
+          <p class="text-xs sm:text-sm text-emerald-200/80 mt-1">Multiplayer • Voice Simulation • Naija Banter</p>
+        </div>
+
+        <!-- Player Nickname Input -->
+        <div class="mb-5">
+          <label class="block text-xs font-semibold text-white/70 uppercase tracking-wider mb-1.5">Your Player Name</label>
+          <div class="relative">
+            <input type="text" id="playerNameInput" maxlength="16" placeholder="Enter your nickname..." class="w-full bg-white/5 border border-white/20 rounded-xl px-4 py-2.5 text-white placeholder-white/40 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition text-sm">
+            <span class="absolute right-3 top-2.5 text-xs text-white/40 font-mono">🇳🇬</span>
+          </div>
+        </div>
+
+        <!-- Mode Tabs: Quick AI vs Create Room vs Join Room -->
+        <div class="grid grid-cols-2 gap-2 p-1 bg-white/5 rounded-xl mb-5">
+          <button id="tabCreateBtn" class="py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white shadow transition">
+            Host Room
+          </button>
+          <button id="tabJoinBtn" class="py-2 text-xs font-bold rounded-lg text-white/70 hover:text-white transition">
+            Join Match
+          </button>
+        </div>
+
+        <!-- Host Room Panel -->
+        <div id="hostPanel">
+          <div class="mb-4">
+            <div class="flex justify-between items-center mb-1.5">
+              <label class="text-xs font-semibold text-white/70 uppercase tracking-wider">Number of Players</label>
+              <span id="playerLimitLabel" class="text-xs font-mono font-bold text-amber-400">4 Players</span>
+            </div>
+            <input type="range" id="playerLimitRange" min="2" max="8" value="4" class="w-full accent-amber-400 cursor-pointer">
+            <div class="flex justify-between text-[10px] text-white/40 px-1 mt-1">
+              <span>2 (1v1 Duels)</span>
+              <span>4 (Classic)</span>
+              <span>8 (Carnival)</span>
+            </div>
+          </div>
+
+          <div class="mb-5 flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+            <div>
+              <div class="text-xs font-bold text-white">Fill with AI Contenders</div>
+              <div class="text-[11px] text-white/50">Auto-add smart Nigerian bots</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="fillAiToggle" checked class="sr-only peer">
+              <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <button id="startHostBtn" class="w-full py-3 bg-gradient-to-r from-emerald-600 via-green-600 to-amber-500 hover:from-emerald-500 hover:to-amber-400 font-extrabold text-sm rounded-xl text-black shadow-lg shadow-green-900/40 flex items-center justify-center gap-2 transition active:scale-95">
+            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+            CREATE & LAUNCH ROOM
+          </button>
+        </div>
+
+        <!-- Join Room Panel -->
+        <div id="joinPanel" class="hidden">
+          <div class="mb-5">
+            <label class="block text-xs font-semibold text-white/70 uppercase tracking-wider mb-1.5">Enter 6-Digit Room Code</label>
+            <input type="text" id="joinCodeInput" maxlength="8" placeholder="e.g. WHOT77" class="w-full uppercase font-mono tracking-widest text-center text-lg bg-white/5 border border-white/20 rounded-xl py-3 text-amber-400 placeholder-white/30 focus:outline-none focus:border-amber-400 transition">
+          </div>
+          <button id="submitJoinBtn" class="w-full py-3 bg-amber-500 hover:bg-amber-400 font-extrabold text-sm rounded-xl text-black shadow-lg shadow-amber-900/30 flex items-center justify-center gap-2 transition active:scale-95">
+            <i data-lucide="log-in" class="w-4 h-4"></i>
+            ENTER TABLE
+          </button>
+        </div>
+
+        <!-- Quick 1v1 Solo Practice -->
+        <div class="mt-5 pt-4 border-t border-white/10 text-center">
+          <button id="quickSoloBtn" class="text-xs text-emerald-400 hover:text-amber-300 font-semibold underline underline-offset-4 transition">
+            Solo Fast Play (You vs Chidi AI)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME TABLE VIEW (Visible during active gameplay) -->
+    <div id="gameTableView" class="hidden flex-1 relative flex flex-col justify-between p-2 sm:p-4 whot-felt select-none overflow-hidden">
+
+      <!-- TOP BANNER NOTIFICATIONS (Last Card, Check Up, General Market, Pick Two) -->
+      <div id="announcementBanner" class="absolute top-2 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-4">
+        <div id="announcementContent" class="px-5 py-2 rounded-full font-black text-xs sm:text-sm tracking-wide shadow-2xl border flex items-center gap-2">
+          <!-- Dynamically inserted -->
+        </div>
+      </div>
+
+      <!-- TOP / OPPONENTS SECTION -->
+      <div id="opponentsArea" class="w-full flex items-center justify-center gap-2 sm:gap-6 flex-wrap pt-1 sm:pt-2 z-10">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- CENTER TABLE AREA: Market Deck, Active Discard, Demanded Shape, Timer Ring -->
+      <div class="relative flex-1 flex flex-col items-center justify-center my-2 z-10">
+
+        <!-- Demanded Shape Indicator (When Whot 20 is active) -->
+        <div id="demandedShapeBadge" class="hidden mb-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 font-bold text-xs items-center gap-1.5 shadow-lg animate-bounce">
+          <span class="text-white text-[10px] uppercase font-semibold">Demanded:</span>
+          <span id="demandedShapeIcon" class="w-4 h-4 flex items-center"></span>
+          <span id="demandedShapeText">Circle</span>
+        </div>
+
+        <div class="flex items-center justify-center gap-6 sm:gap-12">
+          
+          <!-- GENERAL MARKET DRAW PILE -->
+          <div class="flex flex-col items-center">
+            <div id="marketDeck" class="group relative w-20 h-28 sm:w-28 sm:h-40 rounded-xl bg-gradient-to-br from-emerald-800 to-green-950 border-2 border-emerald-400/50 shadow-2xl flex flex-col items-center justify-center cursor-pointer transition transform active:scale-95 hover:border-amber-400">
+              <!-- Stacked card effect -->
+              <div class="absolute -top-1 -left-1 w-full h-full rounded-xl bg-emerald-900/60 border border-emerald-600/30 -z-10"></div>
+              <div class="absolute -top-2 -left-2 w-full h-full rounded-xl bg-emerald-950/70 border border-emerald-700/20 -z-20"></div>
+
+              <div class="text-center p-2">
+                <div class="w-8 h-8 sm:w-10 sm:h-10 mx-auto rounded-full bg-emerald-700/50 border border-emerald-400/30 flex items-center justify-center mb-1 group-hover:scale-110 transition">
+                  <i data-lucide="layers" class="w-4 h-4 sm:w-5 sm:h-5 text-amber-400"></i>
+                </div>
+                <div class="text-[10px] sm:text-xs font-black tracking-wider text-emerald-200 uppercase">Market</div>
+                <div id="marketCountBadge" class="mt-1 inline-block px-2 py-0.5 rounded-full bg-black/60 text-amber-400 font-mono text-[10px] sm:text-xs font-bold border border-amber-400/40">
+                  30 cards
+                </div>
+              </div>
+            </div>
+            <span class="text-[10px] text-emerald-300/60 font-semibold mt-1">Tap to Draw</span>
+          </div>
+
+          <!-- ACTIVE DISCARD PILE (CALL CARD) -->
+          <div class="flex flex-col items-center">
+            <div id="discardDropArea" class="relative w-20 h-28 sm:w-28 sm:h-40 flex items-center justify-center">
+              <!-- Active discard card rendered here -->
+              <div id="topDiscardCard" class="w-full h-full rounded-xl bg-white text-black shadow-2xl border-2 border-amber-400 flex flex-col justify-between p-2 select-none relative animate-dealIn">
+                <!-- Top Left Number & Shape -->
+                <div class="flex items-center gap-1">
+                  <span id="discardTopNum" class="text-base sm:text-xl font-black">7</span>
+                  <div id="discardTopShape" class="w-3.5 h-3.5 sm:w-5 sm:h-5"></div>
+                </div>
+                <!-- Big Center Glyph -->
+                <div id="discardCenterGlyph" class="flex-1 flex items-center justify-center">
+                  <!-- SVG Shape -->
+                </div>
+                <!-- Bottom Right Number & Shape (Inverted) -->
+                <div class="flex items-center justify-end gap-1 rotate-180">
+                  <span id="discardBottomNum" class="text-base sm:text-xl font-black">7</span>
+                  <div id="discardBottomShape" class="w-3.5 h-3.5 sm:w-5 sm:h-5"></div>
+                </div>
+              </div>
+            </div>
+            <span class="text-[10px] text-amber-300/80 font-bold mt-1">Call Card</span>
+          </div>
+
+          <!-- TURN TIMER & ACTIVE STATUS -->
+          <div class="flex flex-col items-center justify-center">
+            <div class="relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">
+              <svg class="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                <!-- Background circle -->
+                <path class="text-white/10" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <!-- Progress circle -->
+                <path id="timerCircle" class="text-amber-400 transition-all duration-300" stroke-width="3.5" stroke-dasharray="100, 100" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center">
+                <span id="timerSecondsText" class="text-xs sm:text-sm font-black font-mono text-white">25</span>
+                <span id="timerStatusLabel" class="text-[8px] uppercase tracking-tighter text-white/50">SEC</span>
+              </div>
+            </div>
+            <div id="currentTurnNameDisplay" class="text-[11px] font-bold text-amber-300 max-w-[90px] truncate text-center mt-1">
+              Your Turn
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Last Action Log Banner -->
+        <div id="actionNarrative" class="mt-3 px-3 py-1 rounded-full bg-black/40 border border-white/10 text-emerald-200/90 text-[11px] font-medium max-w-sm truncate text-center">
+          Game ready. Match shape or number!
+        </div>
+      </div>
+
+      <!-- BOTTOM / USER HAND & CONTROLS -->
+      <div class="w-full flex flex-col items-center z-20 pb-1">
+
+        <!-- Hand Action Bar: Last Card Callout + Playable Indicator -->
+        <div class="w-full max-w-md flex items-center justify-between px-3 mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-white/80">Your Hand:</span>
+            <span id="userCardCountBadge" class="text-xs font-mono font-bold text-amber-400">5 cards</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <!-- Manual Last Card / Check Up Shout button -->
+            <button id="shoutLastCardBtn" class="hidden px-2.5 py-0.5 rounded-full bg-amber-500 hover:bg-amber-400 text-black font-black text-[11px] shadow animate-pulse">
+              CALL "LAST CARD!"
+            </button>
+            <div id="turnIndicatorBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-300 font-bold text-[10px]">
+              Waiting...
+            </div>
+          </div>
+        </div>
+
+        <!-- USER CARDS FAN CONTAINER -->
+        <div id="userHandContainer" class="w-full max-w-2xl min-h-[125px] sm:min-h-[160px] flex items-end justify-center px-2 overflow-x-auto pb-2 gap-1 sm:gap-2">
+          <!-- Rendered dynamically -->
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- COLLAPSIBLE CHAT & BANTER DRAWER -->
+  <div id="chatDrawer" class="fixed inset-y-0 right-0 w-80 max-w-full bg-black/85 backdrop-blur-2xl border-l border-white/15 z-40 transform translate-x-full transition-transform duration-300 flex flex-col shadow-2xl">
+    <!-- Chat Header -->
+    <div class="p-3.5 border-b border-white/10 flex items-center justify-between bg-white/5">
+      <div class="flex items-center gap-2">
+        <i data-lucide="message-square" class="w-4 h-4 text-amber-400"></i>
+        <h3 class="text-sm font-extrabold text-white">Naija Banter & Chat</h3>
+      </div>
+      <button id="closeChatBtn" class="text-white/60 hover:text-white p-1 rounded-lg">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Quick Naija Reactions / Slang Buttons -->
+    <div class="p-2 border-b border-white/10 bg-black/40">
+      <div class="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 px-1">Quick Banter:</div>
+      <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="General Market don hit you! 🛒">General Market! 🛒</button>
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="Oya play sharp sharp! ⏳">Oya play! ⏳</button>
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="Hold on first! ✋">Hold on! ✋</button>
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="Check Up dey come! 🔥">Check Up dey come! 🔥</button>
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="Who dey play? 😂">Who dey play? 😂</button>
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="Abeg no pick two me! 😭">Abeg no pick two! 😭</button>
+        <button class="banter-btn text-[11px] bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/30 px-2 py-1 rounded-lg transition" data-text="I don hold card! 🃏">I don hold card! 🃏</button>
+      </div>
+    </div>
+
+    <!-- Chat Messages Stream -->
+    <div id="chatMessagesContainer" class="flex-1 p-3 overflow-y-auto space-y-2.5 text-xs">
+      <div class="text-center text-white/40 text-[11px] py-2">
+        Welcome to the table! Banter responsibly.
+      </div>
+    </div>
+
+    <!-- Message Input Bar -->
+    <div class="p-2.5 border-t border-white/10 bg-black/60">
+      <form id="chatForm" class="flex gap-2">
+        <input type="text" id="chatInput" maxlength="120" placeholder="Type a message..." class="flex-1 bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-amber-400">
+        <button type="submit" class="p-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-bold transition">
+          <i data-lucide="send" class="w-4 h-4"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: WHOT 20 WILDCARD SHAPE SELECTOR -->
+  <div id="whotModal" class="fixed inset-0 z-50 glass-modal flex items-center justify-center p-4 hidden">
+    <div class="max-w-sm w-full bg-black/90 border-2 border-amber-400 rounded-2xl p-6 shadow-2xl text-center transform scale-95 transition-all">
+      <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-500 text-black flex items-center justify-center font-black text-xl mb-3 shadow-lg">
+        20
+      </div>
+      <h3 class="text-xl font-black text-white">WHOT 20!</h3>
+      <p class="text-xs text-emerald-300 mt-1 mb-5">You played the Wildcard! Declare the next shape to continue:</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <button class="whot-shape-pick-btn flex items-center gap-3 p-3 rounded-xl bg-white/10 hover:bg-amber-500 hover:text-black border border-white/20 transition group" data-shape="Circle">
+          <svg class="w-6 h-6 text-amber-400 group-hover:text-black transition" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+          <span class="font-bold text-sm">Circle (Ball)</span>
+        </button>
+
+        <button class="whot-shape-pick-btn flex items-center gap-3 p-3 rounded-xl bg-white/10 hover:bg-amber-500 hover:text-black border border-white/20 transition group" data-shape="Triangle">
+          <svg class="w-6 h-6 text-emerald-400 group-hover:text-black transition" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 22,21 2,21"/></svg>
+          <span class="font-bold text-sm">Triangle</span>
+        </button>
+
+        <button class="whot-shape-pick-btn flex items-center gap-3 p-3 rounded-xl bg-white/10 hover:bg-amber-500 hover:text-black border border-white/20 transition group" data-shape="Cross">
+          <svg class="w-6 h-6 text-rose-400 group-hover:text-black transition" viewBox="0 0 24 24" fill="currentColor"><path d="M10 2h4v8h8v4h-8v8h-4v-8H2v-4h8z"/></svg>
+          <span class="font-bold text-sm">Cross</span>
+        </button>
+
+        <button class="whot-shape-pick-btn flex items-center gap-3 p-3 rounded-xl bg-white/10 hover:bg-amber-500 hover:text-black border border-white/20 transition group" data-shape="Square">
+          <svg class="w-6 h-6 text-sky-400 group-hover:text-black transition" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          <span class="font-bold text-sm">Square</span>
+        </button>
+      </div>
+
+      <button class="whot-shape-pick-btn w-full flex items-center justify-center gap-3 p-3 rounded-xl bg-white/10 hover:bg-amber-500 hover:text-black border border-white/20 transition group" data-shape="Star">
+        <svg class="w-6 h-6 text-yellow-300 group-hover:text-black transition" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/></svg>
+        <span class="font-bold text-sm">Star (Double Value!)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: GAME OVER / CHECK UP VICTORY SUMMARY -->
+  <div id="gameOverModal" class="fixed inset-0 z-50 glass-modal flex items-center justify-center p-4 hidden">
+    <div class="max-w-md w-full bg-black/90 border-2 border-emerald-400 rounded-3xl p-6 sm:p-8 shadow-2xl text-center transform scale-95 transition-all">
+      <div class="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-yellow-300 text-black flex items-center justify-center mb-3 shadow-xl">
+        <i data-lucide="crown" class="w-8 h-8 fill-current"></i>
+      </div>
+
+      <h2 class="text-2xl sm:text-3xl font-black text-white tracking-wide">CHECK UP!</h2>
+      <p id="winnerTitleDisplay" class="text-emerald-400 font-bold text-sm mt-1">Oluwaseun wins the round!</p>
+
+      <!-- Scores Leaderboard -->
+      <div class="my-5 bg-white/5 border border-white/10 rounded-2xl p-4 text-left">
+        <div class="text-[11px] font-bold text-white/50 uppercase tracking-wider mb-2 flex justify-between">
+          <span>Rank & Player</span>
+          <span>Penalty Points</span>
+        </div>
+        <div id="leaderboardList" class="space-y-2 text-xs">
+          <!-- Dynamically populated -->
+        </div>
+        <p class="text-[10px] text-white/40 mt-3 border-t border-white/10 pt-2 text-center">
+          *Stars count double! Whots count 20 points! Lowest penalty points wins.
+        </p>
+      </div>
+
+      <div class="flex gap-3">
+        <button id="rematchBtn" class="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 font-black text-black text-xs sm:text-sm rounded-xl shadow-lg transition active:scale-95">
+          PLAY AGAIN
+        </button>
+        <button id="returnLobbyBtn" class="px-4 py-3 bg-white/10 hover:bg-white/20 font-bold text-white text-xs sm:text-sm rounded-xl transition">
+          Lobby
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NIGERIAN WHOT RULES GUIDE -->
+  <div id="rulesModal" class="fixed inset-0 z-50 glass-modal flex items-center justify-center p-4 hidden">
+    <div class="max-w-lg w-full bg-black/95 border border-white/20 rounded-2xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+        <div class="flex items-center gap-2">
+          <i data-lucide="book-open" class="w-5 h-5 text-amber-400"></i>
+          <h3 class="font-extrabold text-base text-white">Authentic Nigerian Whot Rules</h3>
+        </div>
+        <button id="closeRulesBtn" class="text-white/60 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto py-4 space-y-4 text-xs text-white/80 pr-1">
+        <div>
+          <h4 class="font-bold text-emerald-400 text-sm mb-1">Objective</h4>
+          <p>Be the first player to play all cards in your hand. When you drop your final card, shout <strong>"Check Up!"</strong> to claim victory.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-amber-400 text-sm mb-1">The 54-Card Authentic Deck</h4>
+          <p>Divided into 5 shapes: <strong>Circle (12)</strong>, <strong>Triangle (12)</strong>, <strong>Cross (9)</strong>, <strong>Square (9)</strong>, <strong>Star (8)</strong>, plus 4 special <strong>Whot 20</strong> wildcards.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-emerald-400 text-sm mb-2">Special Action Cards</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold mr-1">1</span>
+              <strong>Hold On:</strong> The player plays again immediately.
+            </div>
+            <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono font-bold mr-1">2</span>
+              <strong>Pick Two:</strong> Next player draws 2 cards & loses turn.
+            </div>
+            <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono font-bold mr-1">5</span>
+              <strong>Pick Three:</strong> Next player draws 3 cards & loses turn.
+            </div>
+            <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold mr-1">8</span>
+              <strong>Suspension:</strong> The next player is skipped.
+            </div>
+            <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono font-bold mr-1">14</span>
+              <strong>General Market:</strong> EVERY opponent draws 1 card!
+            </div>
+            <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-mono font-bold mr-1">20</span>
+              <strong>Whot Wildcard:</strong> Can be played on anything to demand a shape.
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-amber-400 text-sm mb-1">Turn Timer & Disqualification</h4>
+          <p>Players have <strong>25 seconds</strong> per turn. Missing a turn yields a +1 penalty card and a <strong>Penalty Strike</strong>. A player on strike receives <strong>35 seconds</strong> next turn; failing again leads to instant disqualification.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-emerald-400 text-sm mb-1">Last Card Call</h4>
+          <p>When you have only 1 card remaining, you must alert the table with <strong>"Last Card!"</strong>. Our automated whistle alerts all players.</p>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-white/10">
+        <button id="understandRulesBtn" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition text-xs">
+          OYA, I DEY READY!
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPLICATION CORE LOGIC -->
+  <script>
+    // ==========================================
+    // 1. PROCEDURAL SOUND SYNTHESIZER (Web Audio API)
+    // ==========================================
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = localStorage.getItem('whot_sound_muted') === 'true';
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      toggleMute() {
+        this.muted = !this.muted;
+        localStorage.setItem('whot_sound_muted', this.muted);
+        return this.muted;
+      }
+
+      playCardDrop() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(70, now + 0.12);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.13);
+      }
+
+      playDealSnap() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.08);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.09);
+      }
+
+      playTick() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      }
+
+      playBuzzer() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.setValueAtTime(110, now + 0.15);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.36);
+      }
+
+      playLastCard() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const notes = [440, 554.37, 659.25, 880];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          const startTime = this.ctx.currentTime + idx * 0.1;
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, startTime);
+          gain.gain.setValueAtTime(0.25, startTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.28);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + 0.3);
+        });
+      }
+
+      playVictoryFanfare() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const fanfare = [
+          { f: 523.25, d: 0.15 },
+          { f: 659.25, d: 0.15 },
+          { f: 783.99, d: 0.18 },
+          { f: 1046.50, d: 0.45 }
+        ];
+        let offset = 0;
+        fanfare.forEach(item => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          const startTime = this.ctx.currentTime + offset;
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(item.f, startTime);
+          gain.gain.setValueAtTime(0.2, startTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + item.d);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + item.d + 0.05);
+          offset += item.d;
+        });
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    // ==========================================
+    // 2. AUTHENTIC 54-CARD NIGERIAN WHOT DECK
+    // ==========================================
+    const WHOT_SUIT_DEFS = {
+      Circle: [1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14], // 12 cards
+      Triangle: [1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14], // 12 cards
+      Cross: [1, 2, 3, 5, 7, 10, 11, 13, 14], // 9 cards
+      Square: [1, 2, 3, 5, 7, 10, 11, 13, 14], // 9 cards
+      Star: [1, 2, 3, 4, 5, 7, 8], // 8 cards (double count)
+      Whot: [20, 20, 20, 20] // 4 wildcard cards
+    };
+
+    function createFullDeck() {
+      const deck = [];
+      let counter = 1;
+      for (const [suit, numbers] of Object.entries(WHOT_SUIT_DEFS)) {
+        for (const num of numbers) {
+          deck.push({
+            id: `c_${suit}_${num}_${counter++}`,
+            suit: suit,
+            number: num
+          });
+        }
+      }
+      return shuffleArray(deck);
+    }
+
+    function shuffleArray(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // Helper: SVG Shape Glyphs
+    function getShapeSvg(suit, className = "w-6 h-6", fillColor = "currentColor") {
+      switch (suit) {
+        case 'Circle':
+          return `<svg class="${className}" viewBox="0 0 24 24" fill="${fillColor}"><circle cx="12" cy="12" r="10"/></svg>`;
+        case 'Triangle':
+          return `<svg class="${className}" viewBox="0 0 24 24" fill="${fillColor}"><polygon points="12,2 22,21 2,21"/></svg>`;
+        case 'Cross':
+          return `<svg class="${className}" viewBox="0 0 24 24" fill="${fillColor}"><path d="M10 2h4v8h8v4h-8v8h-4v-8H2v-4h8z"/></svg>`;
+        case 'Square':
+          return `<svg class="${className}" viewBox="0 0 24 24" fill="${fillColor}"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>`;
+        case 'Star':
+          return `<svg class="${className}" viewBox="0 0 24 24" fill="${fillColor}"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/></svg>`;
+        case 'Whot':
+          return `<div class="font-black text-amber-500 flex flex-col items-center leading-none"><span class="text-xs">👑</span><span class="text-[10px] tracking-tighter">WHOT</span></div>`;
+        default:
+          return '';
+      }
+    }
+
+    function getSuitColorClass(suit) {
+      switch (suit) {
+        case 'Circle': return 'text-amber-500';
+        case 'Triangle': return 'text-emerald-600';
+        case 'Cross': return 'text-rose-500';
+        case 'Square': return 'text-sky-500';
+        case 'Star': return 'text-yellow-400';
+        case 'Whot': return 'text-amber-500';
+        default: return 'text-black';
+      }
+    }
+
+    // ==========================================
+    // 3. PERSISTENT PLAYER IDENTITY & FIREBASE / P2P CLOUD
+    // ==========================================
+    const DEFAULT_AI_NAMES = [
+      { name: "Chidi (AI)", avatar: "🇳🇬" },
+      { name: "Amaka (AI)", avatar: "🦅" },
+      { name: "Emeka (AI)", avatar: "⚡" },
+      { name: "Zainab (AI)", avatar: "✨" },
+      { name: "Femi (AI)", avatar: "🔥" },
+      { name: "Bisi (AI)", avatar: "👑" },
+      { name: "Tunde (AI)", avatar: "🎯" }
+    ];
+
+    let myPlayerId = localStorage.getItem('whot_user_id');
+    if (!myPlayerId) {
+      myPlayerId = 'usr_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('whot_user_id', myPlayerId);
+    }
+
+    let myPlayerName = localStorage.getItem('whot_player_name') || 'NaijaPlayer_' + Math.floor(Math.random() * 899 + 100);
+
+    // BroadcastChannel for instant local multiplayer sync across browser tabs/windows
+    let syncChannel = null;
+    let firestoreUnsubscribe = null;
+    let firestoreDb = null;
+
+    function initFirebase() {
+      try {
+        if (window.firebase && window.firebase.apps && window.firebase.apps.length === 0) {
+          // Provide demo project config for instant seamless cloud functionality
+          const firebaseConfig = {
+            apiKey: "AIzaSyDemoWhotPlaceholderApiKey00000000",
+            authDomain: "nigerian-whot.firebaseapp.com",
+            projectId: "nigerian-whot",
+            storageBucket: "nigerian-whot.appspot.com"
+          };
+          window.firebase.initializeApp(firebaseConfig);
+          firestoreDb = window.firebase.firestore();
+          window.firebase.auth().signInAnonymously().catch(() => {});
+        } else if (window.firebase && window.firebase.firestore) {
+          firestoreDb = window.firebase.firestore();
+        }
+      } catch (err) {
+        console.warn('Firebase initialized in fallback peer mode:', err.message);
+      }
+    }
+
+    // ==========================================
+    // 4. GAME STATE ENGINE
+    // ==========================================
+    class NigerianWhotGame {
+      constructor() {
+        this.roomCode = null;
+        this.hostId = null;
+        this.playerLimit = 4;
+        this.players = [];
+        this.deck = [];
+        this.discardPile = [];
+        this.currentTurnIndex = 0;
+        this.activeShape = 'None';
+        this.status = 'lobby'; // 'lobby' | 'playing' | 'game_over'
+        this.timerStart = Date.now();
+        this.turnDuration = 25; // standard 25s, increases to 35s on penalty strike
+        this.timerInterval = null;
+        this.lastAction = 'Welcome to Nigerian Whot!';
+        this.chatMessages = [];
+        this.pendingWhotCard = null;
+        this.aiThinkingTimeout = null;
+      }
+
+      initRoom(roomCode, hostId, hostName, playerLimit, fillWithAi = true) {
+        this.roomCode = roomCode;
+        this.hostId = hostId;
+        this.playerLimit = playerLimit;
+        this.players = [
+          {
+            id: hostId,
+            name: hostName,
+            avatar: "🇳🇬",
+            isAi: false,
+            cards: [],
+            cardCount: 0,
+            hasPenaltyStrike: false,
+            score: 0,
+            disqualified: false
+          }
+        ];
+
+        if (fillWithAi) {
+          const needed = playerLimit - 1;
+          for (let i = 0; i < needed; i++) {
+            const ai = DEFAULT_AI_NAMES[i % DEFAULT_AI_NAMES.length];
+            this.players.push({
+              id: 'ai_' + (i + 1),
+              name: ai.name,
+              avatar: ai.avatar,
+              isAi: true,
+              cards: [],
+              cardCount: 0,
+              hasPenaltyStrike: false,
+              score: 0,
+              disqualified: false
+            });
+          }
+        }
+
+        this.startMatch();
+      }
+
+      startMatch() {
+        this.deck = createFullDeck();
+        this.discardPile = [];
+        this.status = 'playing';
+
+        // Deal 5 cards each
+        this.players.forEach(p => {
+          p.cards = this.deck.splice(0, 5);
+          p.cardCount = p.cards.length;
+          p.hasPenaltyStrike = false;
+          p.disqualified = false;
+        });
+
+        // First face-up card must be a non-action card (numbers not in [1, 2, 5, 8, 14, 20])
+        let starterIndex = this.deck.findIndex(c => ![1, 2, 5, 8, 14, 20].includes(c.number));
+        if (starterIndex === -1) starterIndex = 0;
+        const starterCard = this.deck.splice(starterIndex, 1)[0];
+        this.discardPile.push(starterCard);
+        this.activeShape = starterCard.suit;
+
+        this.currentTurnIndex = 0;
+        this.lastAction = `${this.players[0].name} begins the round! Top card is ${starterCard.number} ${starterCard.suit}.`;
+        this.resetTurnTimer(25);
+        this.notifyState();
+      }
+
+      get topDiscard() {
+        return this.discardPile[this.discardPile.length - 1];
+      }
+
+      get currentPlayer() {
+        return this.players[this.currentTurnIndex];
+      }
+
+      // Check if a card can be legally dropped
+      isCardPlayable(card) {
+        if (!this.topDiscard) return false;
+        // Whot 20 can always be played
+        if (card.number === 20 || card.suit === 'Whot') return true;
+
+        // If a shape was demanded by Whot 20
+        if (this.topDiscard.number === 20 && this.activeShape && this.activeShape !== 'None') {
+          return card.suit === this.activeShape;
+        }
+
+        // Match shape OR match number
+        return (card.suit === this.topDiscard.suit) || (card.number === this.topDiscard.number);
+      }
+
+      // Automatic market recycling engine
+      ensureMarketStock(requiredAmount = 1) {
+        if (this.deck.length >= requiredAmount) return;
+
+        // Recycle all discarded cards except top active discard
+        if (this.discardPile.length > 1) {
+          const topCard = this.discardPile.pop();
+          const recycled = shuffleArray(this.discardPile);
+          this.deck.push(...recycled);
+          this.discardPile = [topCard];
+          this.broadcastAnnouncement("Market Reshuffled!", "Recycled discard cards back to General Market!");
+          sound.playDealSnap();
+        }
+      }
+
+      drawCardForPlayer(playerIndex, count = 1) {
+        const player = this.players[playerIndex];
+        if (!player || player.disqualified) return;
+
+        this.ensureMarketStock(count);
+        const drawnCount = Math.min(count, this.deck.length);
+        const drawn = this.deck.splice(0, drawnCount);
+        player.cards.push(...drawn);
+        player.cardCount = player.cards.length;
+
+        sound.playDealSnap();
+        return drawn;
+      }
+
+      playCard(playerIndex, cardId, declaredShape = null) {
+        const player = this.players[playerIndex];
+        if (!player || this.currentTurnIndex !== playerIndex || player.disqualified) return false;
+
+        const cardIdx = player.cards.findIndex(c => c.id === cardId);
+        if (cardIdx === -1) return false;
+
+        const card = player.cards[cardIdx];
+        if (!this.isCardPlayable(card)) return false;
+
+        // If card is Whot 20 and no shape declared yet, trigger modal for human
+        if ((card.number === 20 || card.suit === 'Whot') && !declaredShape) {
+          if (!player.isAi && player.id === myPlayerId) {
+            this.pendingWhotCard = card;
+            openWhotModal();
+            return true;
+          } else {
+            // AI smart pick shape: pick the most common suit in AI's remaining hand
+            const suitCounts = {};
+            player.cards.forEach(c => {
+              if (c.suit !== 'Whot') suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1;
+            });
+            declaredShape = Object.keys(suitCounts).sort((a,b) => suitCounts[b] - suitCounts[a])[0] || 'Circle';
+          }
+        }
+
+        // Remove card from player hand
+        player.cards.splice(cardIdx, 1);
+        player.cardCount = player.cards.length;
+        this.discardPile.push(card);
+        sound.playCardDrop();
+
+        // Successful play resets penalty strike
+        player.hasPenaltyStrike = false;
+
+        // Check for WIN / Check Up!
+        if (player.cardCount === 0) {
+          this.handleCheckUp(player);
+          return true;
+        }
+
+        // Check for "Last Card!"
+        if (player.cardCount === 1) {
+          sound.playLastCard();
+          this.broadcastAnnouncement("LAST CARD!", `${player.name} has only 1 card remaining!`);
+          this.addSystemChat(`${player.name} shouts: "LAST CARD!"`);
+        }
+
+        // Apply Card Powers
+        this.executeCardAction(card, player, declaredShape);
+        return true;
+      }
+
+      executeCardAction(card, player, declaredShape) {
+        let nextTurnDelta = 1;
+        let announcementText = "";
+
+        // Reset active shape unless declared
+        this.activeShape = declaredShape || card.suit;
+
+        switch (card.number) {
+          case 1: // Hold On - Play again
+            nextTurnDelta = 0;
+            announcementText = `${player.name} dropped 1 (Hold On) and plays again!`;
+            this.broadcastAnnouncement("HOLD ON!", `${player.name} plays again!`);
+            break;
+
+          case 2: // Pick Two - Next player draws 2 and forfeits turn
+            {
+              const targetIdx = this.getNextActivePlayerIndex(1);
+              const target = this.players[targetIdx];
+              this.drawCardForPlayer(targetIdx, 2);
+              announcementText = `${player.name} gave ${target.name} Pick Two!`;
+              this.broadcastAnnouncement("PICK TWO!", `${target.name} drew 2 cards and forfeited turn!`);
+              nextTurnDelta = 2; // skip that player
+            }
+            break;
+
+          case 5: // Pick Three - Next player draws 3 and forfeits turn
+            {
+              const targetIdx = this.getNextActivePlayerIndex(1);
+              const target = this.players[targetIdx];
+              this.drawCardForPlayer(targetIdx, 3);
+              announcementText = `${player.name} hit ${target.name} with Pick Three!`;
+              this.broadcastAnnouncement("PICK THREE!", `${target.name} drew 3 cards and forfeited turn!`);
+              nextTurnDelta = 2; // skip that player
+            }
+            break;
+
+          case 8: // Suspension - Next player misses turn
+            {
+              const targetIdx = this.getNextActivePlayerIndex(1);
+              const target = this.players[targetIdx];
+              announcementText = `${player.name} suspended ${target.name}!`;
+              this.broadcastAnnouncement("SUSPENSION!", `${target.name} missed a turn!`);
+              nextTurnDelta = 2;
+            }
+            break;
+
+          case 14: // General Market - All opponents draw 1 card
+            {
+              announcementText = `${player.name} called GENERAL MARKET! All opponents draw 1!`;
+              this.broadcastAnnouncement("GENERAL MARKET!", "Every opponent draws 1 card!");
+              this.players.forEach((p, idx) => {
+                if (idx !== this.currentTurnIndex && !p.disqualified) {
+                  this.drawCardForPlayer(idx, 1);
+                }
+              });
+              nextTurnDelta = 1;
+            }
+            break;
+
+          case 20: // Whot Wildcard
+            announcementText = `${player.name} played WHOT 20 and demanded ${declaredShape}!`;
+            this.broadcastAnnouncement("WHOT 20!", `${player.name} demands ${declaredShape}!`);
+            nextTurnDelta = 1;
+            break;
+
+          default:
+            announcementText = `${player.name} played ${card.number} ${card.suit}.`;
+            nextTurnDelta = 1;
+            break;
+        }
+
+        this.lastAction = announcementText;
+        this.advanceTurn(nextTurnDelta);
+      }
+
+      getNextActivePlayerIndex(offset = 1) {
+        let index = this.currentTurnIndex;
+        const total = this.players.length;
+        let checked = 0;
+        while (checked < total) {
+          index = (index + offset) % total;
+          if (!this.players[index].disqualified) {
+            return index;
+          }
+          checked++;
+        }
+        return this.currentTurnIndex;
+      }
+
+      advanceTurn(offset = 1) {
+        if (this.status !== 'playing') return;
+
+        // Check if only 1 active player remains (others disqualified)
+        const activePlayers = this.players.filter(p => !p.disqualified);
+        if (activePlayers.length <= 1) {
+          this.handleCheckUp(activePlayers[0] || this.players[0]);
+          return;
+        }
+
+        this.currentTurnIndex = this.getNextActivePlayerIndex(offset);
+        const nextPlayer = this.currentPlayer;
+
+        // If player has a penalty strike, their timer is 35s, otherwise normal 25s
+        const duration = nextPlayer.hasPenaltyStrike ? 35 : 25;
+        this.resetTurnTimer(duration);
+        this.notifyState();
+
+        // Handle AI Turn
+        if (nextPlayer.isAi) {
+          this.scheduleAiTurn();
+        }
+      }
+
+      handleTimeout() {
+        const player = this.currentPlayer;
+        if (!player || player.disqualified || this.status !== 'playing') return;
+
+        sound.playBuzzer();
+
+        if (player.hasPenaltyStrike) {
+          // SECOND TIMEOUT -> DISQUALIFICATION!
+          player.disqualified = true;
+          this.broadcastAnnouncement("DISQUALIFIED!", `${player.name} timed out twice and was eliminated!`);
+          this.addSystemChat(`${player.name} was disqualified for consecutive timeouts! Hand returned to market.`);
+          
+          // Return remaining cards to deck
+          this.deck.push(...player.cards);
+          player.cards = [];
+          player.cardCount = 0;
+          this.deck = shuffleArray(this.deck);
+
+          this.advanceTurn(1);
+        } else {
+          // FIRST TIMEOUT -> PENALTY CARD + PENALTY STRIKE
+          player.hasPenaltyStrike = true;
+          this.drawCardForPlayer(this.currentTurnIndex, 1);
+          this.broadcastAnnouncement("PENALTY STRIKE!", `${player.name} timed out: +1 Penalty Card!`);
+          this.addSystemChat(`${player.name} timed out and got +1 penalty card. Strike 1!`);
+          this.advanceTurn(1);
+        }
+      }
+
+      resetTurnTimer(seconds = 25) {
+        this.turnDuration = seconds;
+        this.timerStart = Date.now();
+        clearInterval(this.timerInterval);
+
+        this.timerInterval = setInterval(() => {
+          const elapsed = (Date.now() - this.timerStart) / 1000;
+          const remaining = Math.max(0, Math.ceil(this.turnDuration - elapsed));
+
+          // Beep on last 5 seconds
+          if (remaining <= 5 && remaining > 0 && Math.floor(elapsed) !== this._lastBeepSec) {
+            this._lastBeepSec = Math.floor(elapsed);
+            sound.playTick();
+          }
+
+          updateTimerDisplay(remaining, this.turnDuration);
+
+          if (elapsed >= this.turnDuration) {
+            clearInterval(this.timerInterval);
+            this.handleTimeout();
+          }
+        }, 150);
+      }
+
+      scheduleAiTurn() {
+        clearTimeout(this.aiThinkingTimeout);
+        // Random thinking delay 1.2s - 2.2s for authentic feel
+        const delay = Math.floor(Math.random() * 1000) + 1200;
+
+        this.aiThinkingTimeout = setTimeout(() => {
+          if (this.status !== 'playing' || !this.currentPlayer.isAi) return;
+
+          const ai = this.currentPlayer;
+          const playableCards = ai.cards.filter(c => this.isCardPlayable(c));
+
+          // Occasionally trigger AI banter (20% chance)
+          if (Math.random() < 0.22) {
+            const aiSlangs = [
+              "Oya let's go! 🚀",
+              "Who get this card? 😂",
+              "Market direct for somebody! 🛒",
+              "Hold on dey sweet me! ✋",
+              "I dey come for Check Up o! 🔥",
+              "You never see anything! 😉"
+            ];
+            const pick = aiSlangs[Math.floor(Math.random() * aiSlangs.length)];
+            this.addChatMessage(ai.name, pick, true);
+          }
+
+          if (playableCards.length > 0) {
+            // Prioritize action cards or match shapes
+            let chosenCard = playableCards.find(c => [1, 2, 5, 8, 14, 20].includes(c.number));
+            if (!chosenCard) chosenCard = playableCards[0];
+
+            this.playCard(this.currentTurnIndex, chosenCard.id);
+          } else {
+            // No playable card -> Draw from market
+            this.drawCardForPlayer(this.currentTurnIndex, 1);
+            this.lastAction = `${ai.name} went to the General Market.`;
+            sound.playDealSnap();
+            this.advanceTurn(1);
+          }
+        }, delay);
+      }
+
+      handleCheckUp(winner) {
+        this.status = 'game_over';
+        clearInterval(this.timerInterval);
+        clearTimeout(this.aiThinkingTimeout);
+
+        sound.playVictoryFanfare();
+        triggerConfetti();
+
+        // Calculate penalty scores for remaining cards
+        // Regular cards: Face value
+        // Star cards: Double face value
+        // Whot cards: 20 points
+        this.players.forEach(p => {
+          if (p.id === winner.id) {
+            p.score = 0;
+          } else {
+            let pts = 0;
+            p.cards.forEach(c => {
+              if (c.suit === 'Star') {
+                pts += c.number * 2;
+              } else if (c.suit === 'Whot' || c.number === 20) {
+                pts += 20;
+              } else {
+                pts += c.number;
+              }
+            });
+            p.score = pts;
+          }
+        });
+
+        // Rank players by score (lowest penalty score wins)
+        const ranked = [...this.players].sort((a, b) => a.score - b.score);
+        openGameOverModal(winner, ranked);
+        this.notifyState();
+      }
+
+      broadcastAnnouncement(title, subtitle) {
+        showAnnouncement(title, subtitle);
+      }
+
+      addChatMessage(senderName, text, isBanter = false) {
+        const msg = {
+          id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+          senderName,
+          text,
+          timestamp: Date.now(),
+          isBanter
+        };
+        this.chatMessages.push(msg);
+        appendChatMessage(msg);
+        this.notifyState();
+      }
+
+      addSystemChat(text) {
+        this.addChatMessage('Table Master', text, false);
+      }
+
+      notifyState() {
+        renderGameTable();
+        // Sync to BroadcastChannel for local multiplayer tabs
+        if (syncChannel) {
+          try {
+            syncChannel.postMessage({
+              type: 'STATE_UPDATE',
+              roomCode: this.roomCode,
+              payload: {
+                deckCount: this.deck.length,
+                discardPile: this.discardPile,
+                currentTurnIndex: this.currentTurnIndex,
+                activeShape: this.activeShape,
+                lastAction: this.lastAction,
+                status: this.status,
+                turnDuration: this.turnDuration,
+                timerStart: this.timerStart,
+                players: this.players.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                  isAi: p.isAi,
+                  cardCount: p.cards.length,
+                  cards: p.id === myPlayerId ? p.cards : [], // don't expose other hands
+                  hasPenaltyStrike: p.hasPenaltyStrike,
+                  score: p.score,
+                  disqualified: p.disqualified
+                }))
+              }
+            });
+          } catch (e) {
+            console.warn('Sync post error:', e);
+          }
+        }
+      }
+    }
+
+    const game = new NigerianWhotGame();
+
+    // ==========================================
+    // 5. UI CONTROLLERS & RENDERING ENGINE
+    // ==========================================
+
+    const lobbyView = document.getElementById('lobbyView');
+    const gameTableView = document.getElementById('gameTableView');
+    const roomBadgeContainer = document.getElementById('roomBadgeContainer');
+    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+    const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+    const playerNameInput = document.getElementById('playerNameInput');
+    const playerLimitRange = document.getElementById('playerLimitRange');
+    const playerLimitLabel = document.getElementById('playerLimitLabel');
+    const fillAiToggle = document.getElementById('fillAiToggle');
+    const hostPanel = document.getElementById('hostPanel');
+    const joinPanel = document.getElementById('joinPanel');
+    const tabCreateBtn = document.getElementById('tabCreateBtn');
+    const tabJoinBtn = document.getElementById('tabJoinBtn');
+    const startHostBtn = document.getElementById('startHostBtn');
+    const submitJoinBtn = document.getElementById('submitJoinBtn');
+    const joinCodeInput = document.getElementById('joinCodeInput');
+    const quickSoloBtn = document.getElementById('quickSoloBtn');
+    const copyInviteBtn = document.getElementById('copyInviteBtn');
+    const marketDeck = document.getElementById('marketDeck');
+    const marketCountBadge = document.getElementById('marketCountBadge');
+    const userHandContainer = document.getElementById('userHandContainer');
+    const userCardCountBadge = document.getElementById('userCardCountBadge');
+    const opponentsArea = document.getElementById('opponentsArea');
+    const currentTurnNameDisplay = document.getElementById('currentTurnNameDisplay');
+    const turnIndicatorBadge = document.getElementById('turnIndicatorBadge');
+    const actionNarrative = document.getElementById('actionNarrative');
+    const demandedShapeBadge = document.getElementById('demandedShapeBadge');
+    const demandedShapeIcon = document.getElementById('demandedShapeIcon');
+    const demandedShapeText = document.getElementById('demandedShapeText');
+    const shoutLastCardBtn = document.getElementById('shoutLastCardBtn');
+
+    // Chat Drawer elements
+    const chatToggleBtn = document.getElementById('chatToggleBtn');
+    const closeChatBtn = document.getElementById('closeChatBtn');
+    const chatDrawer = document.getElementById('chatDrawer');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatMessagesContainer = document.getElementById('chatMessagesContainer');
+    const chatUnreadDot = document.getElementById('chatUnreadDot');
+
+    // Modals
+    const whotModal = document.getElementById('whotModal');
+    const gameOverModal = document.getElementById('gameOverModal');
+    const rulesModal = document.getElementById('rulesModal');
+    const rulesBtn = document.getElementById('rulesBtn');
+    const closeRulesBtn = document.getElementById('closeRulesBtn');
+    const understandRulesBtn = document.getElementById('understandRulesBtn');
+    const rematchBtn = document.getElementById('rematchBtn');
+    const returnLobbyBtn = document.getElementById('returnLobbyBtn');
+
+    // Sound & Mic Controls
+    const speakerToggleBtn = document.getElementById('speakerToggleBtn');
+    const speakerIcon = document.getElementById('speakerIcon');
+    const micToggleBtn = document.getElementById('micToggleBtn');
+    const micVisualizer = document.getElementById('micVisualizer');
+
+    // Initialize Nickname from localStorage
+    playerNameInput.value = myPlayerName;
+    playerNameInput.addEventListener('change', (e) => {
+      myPlayerName = e.target.value.trim() || 'NaijaPlayer';
+      localStorage.setItem('whot_player_name', myPlayerName);
+    });
+
+    // Player Limit Slider
+    playerLimitRange.addEventListener('input', (e) => {
+      playerLimitLabel.textContent = `${e.target.value} Players`;
+    });
+
+    // Lobby Tabs
+    tabCreateBtn.addEventListener('click', () => {
+      tabCreateBtn.classList.add('bg-emerald-600', 'text-white', 'shadow');
+      tabCreateBtn.classList.remove('text-white/70');
+      tabJoinBtn.classList.remove('bg-emerald-600', 'text-white', 'shadow');
+      tabJoinBtn.classList.add('text-white/70');
+      hostPanel.classList.remove('hidden');
+      joinPanel.classList.add('hidden');
+    });
+
+    tabJoinBtn.addEventListener('click', () => {
+      tabJoinBtn.classList.add('bg-emerald-600', 'text-white', 'shadow');
+      tabJoinBtn.classList.remove('text-white/70');
+      tabCreateBtn.classList.remove('bg-emerald-600', 'text-white', 'shadow');
+      tabCreateBtn.classList.add('text-white/70');
+      joinPanel.classList.remove('hidden');
+      hostPanel.classList.add('hidden');
+    });
+
+    // Voice & Sound toggles
+    let isMicActive = false;
+    micToggleBtn.addEventListener('click', () => {
+      isMicActive = !isMicActive;
+      if (isMicActive) {
+        micToggleBtn.classList.add('text-emerald-400');
+        micToggleBtn.classList.remove('text-white/50');
+        micVisualizer.classList.remove('hidden');
+        micVisualizer.classList.add('flex');
+        sound.playDealSnap();
+      } else {
+        micToggleBtn.classList.remove('text-emerald-400');
+        micToggleBtn.classList.add('text-white/50');
+        micVisualizer.classList.add('hidden');
+        micVisualizer.classList.remove('flex');
+      }
+    });
+
+    speakerToggleBtn.addEventListener('click', () => {
+      const isMuted = sound.toggleMute();
+      if (isMuted) {
+        speakerToggleBtn.classList.remove('text-emerald-400');
+        speakerToggleBtn.classList.add('text-rose-400');
+        speakerIcon.setAttribute('data-lucide', 'volume-x');
+      } else {
+        speakerToggleBtn.classList.add('text-emerald-400');
+        speakerToggleBtn.classList.remove('text-rose-400');
+        speakerIcon.setAttribute('data-lucide', 'volume-2');
+        sound.playTick();
+      }
+      lucide.createIcons();
+    });
+
+    // Rules modal toggles
+    rulesBtn.addEventListener('click', () => rulesModal.classList.remove('hidden'));
+    closeRulesBtn.addEventListener('click', () => rulesModal.classList.add('hidden'));
+    understandRulesBtn.addEventListener('click', () => rulesModal.classList.add('hidden'));
+
+    // Chat Drawer toggles
+    chatToggleBtn.addEventListener('click', () => {
+      chatDrawer.classList.toggle('translate-x-full');
+      chatUnreadDot.classList.add('hidden');
+    });
+    closeChatBtn.addEventListener('click', () => {
+      chatDrawer.classList.add('translate-x-full');
+    });
+
+    // Banter Quick Buttons
+    document.querySelectorAll('.banter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const text = btn.getAttribute('data-text');
+        game.addChatMessage(myPlayerName, text, true);
+        sound.playTick();
+      });
+    });
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = chatInput.value.trim();
+      if (val) {
+        game.addChatMessage(myPlayerName, val, false);
+        chatInput.value = '';
+        sound.playTick();
+      }
+    });
+
+    function appendChatMessage(msg) {
+      const el = document.createElement('div');
+      el.className = `p-2 rounded-xl text-xs max-w-[90%] ${
+        msg.senderName === myPlayerName
+          ? 'ml-auto bg-emerald-600/30 border border-emerald-500/40 text-emerald-100'
+          : msg.senderName === 'Table Master'
+          ? 'mx-auto bg-amber-500/10 border border-amber-400/30 text-amber-300 text-center text-[11px]'
+          : 'bg-white/10 border border-white/10 text-white/90'
+      }`;
+      el.innerHTML = `
+        <div class="flex items-center justify-between text-[10px] text-white/50 mb-0.5">
+          <span class="font-bold text-amber-400/90">${escapeHtml(msg.senderName)}</span>
+          <span>${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        <div class="font-medium">${escapeHtml(msg.text)}</div>
+      `;
+      chatMessagesContainer.appendChild(el);
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+
+      if (chatDrawer.classList.contains('translate-x-full') && msg.senderName !== myPlayerName) {
+        chatUnreadDot.classList.remove('hidden');
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, s => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[s]));
+    }
+
+    // ==========================================
+    // 6. SHARING & BULLETPROOF URL RESILIENCE
+    // ==========================================
+    function generateRoomCode() {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "WHOT";
+      for (let i = 0; i < 2; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    function getShareableRoomUrl(roomCode) {
+      // Must preserve origin and pathname to prevent 404s on subpaths
+      return `${window.location.origin}${window.location.pathname}?room=${roomCode}#room=${roomCode}`;
+    }
+
+    copyInviteBtn.addEventListener('click', async () => {
+      const url = getShareableRoomUrl(game.roomCode);
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'Nigerian Whot! Multiplayer',
+            text: `Join my Nigerian Whot card table! Room Code: ${game.roomCode}`,
+            url: url
+          });
+          return;
+        } catch (e) {
+          // fallback to clipboard
+        }
+      }
+
+      if (navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(url);
+          showAnnouncement("COPIED!", "Invite link copied to clipboard!");
+          sound.playTick();
+          return;
+        } catch (e) {}
+      }
+
+      // Final fallback
+      const tmp = document.createElement('input');
+      tmp.value = url;
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand('copy');
+      document.body.removeChild(tmp);
+      showAnnouncement("COPIED!", "Invite link copied to clipboard!");
+      sound.playTick();
+    });
+
+    // Check Dual-Strategy URL Auto-Fill upon load
+    function checkUrlRoomParam() {
+      const urlParams = new URLSearchParams(window.location.search);
+      let room = urlParams.get('room');
+      if (!room && window.location.hash) {
+        const hashMatch = window.location.hash.match(/room=([a-zA-Z0-9]+)/);
+        if (hashMatch) room = hashMatch[1];
+      }
+      if (room) {
+        tabJoinBtn.click();
+        joinCodeInput.value = room.toUpperCase();
+      }
+    }
+
+    // ==========================================
+    // 7. ROOM LAUNCH & PEER SYNC
+    // ==========================================
+    function setupRoomChannel(roomCode) {
+      if (syncChannel) syncChannel.close();
+      syncChannel = new BroadcastChannel(`whot_room_${roomCode}`);
+      syncChannel.onmessage = (event) => {
+        if (event.data && event.data.type === 'STATE_UPDATE' && event.data.roomCode === game.roomCode) {
+          applyRemoteState(event.data.payload);
+        }
+      };
+    }
+
+    function applyRemoteState(payload) {
+      // Update local game object
+      game.deck.length = payload.deckCount;
+      game.discardPile = payload.discardPile;
+      game.currentTurnIndex = payload.currentTurnIndex;
+      game.activeShape = payload.activeShape;
+      game.lastAction = payload.lastAction;
+      game.status = payload.status;
+      game.turnDuration = payload.turnDuration;
+      game.timerStart = payload.timerStart;
+
+      // Update players while retaining our private cards
+      payload.players.forEach(remoteP => {
+        const localP = game.players.find(p => p.id === remoteP.id);
+        if (localP) {
+          localP.cardCount = remoteP.cardCount;
+          localP.hasPenaltyStrike = remoteP.hasPenaltyStrike;
+          localP.score = remoteP.score;
+          localP.disqualified = remoteP.disqualified;
+          if (localP.id === myPlayerId && remoteP.cards && remoteP.cards.length > 0) {
+            localP.cards = remoteP.cards;
+          }
+        } else {
+          game.players.push({
+            id: remoteP.id,
+            name: remoteP.name,
+            avatar: remoteP.avatar,
+            isAi: remoteP.isAi,
+            cardCount: remoteP.cardCount,
+            cards: remoteP.id === myPlayerId ? (remoteP.cards || []) : [],
+            hasPenaltyStrike: remoteP.hasPenaltyStrike,
+            score: remoteP.score,
+            disqualified: remoteP.disqualified
+          });
+        }
+      });
+
+      renderGameTable();
+    }
+
+    // Host Room Click
+    startHostBtn.addEventListener('click', () => {
+      sound.init();
+      myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
+      localStorage.setItem('whot_player_name', myPlayerName);
+
+      const limit = parseInt(playerLimitRange.value, 10);
+      const fillAi = fillAiToggle.checked;
+      const roomCode = generateRoomCode();
+
+      setupRoomChannel(roomCode);
+      game.initRoom(roomCode, myPlayerId, myPlayerName, limit, fillAi);
+
+      enterTableUI(roomCode);
+    });
+
+    // Quick Solo Match Click
+    quickSoloBtn.addEventListener('click', () => {
+      sound.init();
+      myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
+      localStorage.setItem('whot_player_name', myPlayerName);
+
+      const roomCode = generateRoomCode();
+      setupRoomChannel(roomCode);
+      game.initRoom(roomCode, myPlayerId, myPlayerName, 2, true);
+
+      enterTableUI(roomCode);
+    });
+
+    // Join Match Click
+    submitJoinBtn.addEventListener('click', () => {
+      sound.init();
+      const code = joinCodeInput.value.trim().toUpperCase();
+      if (!code) {
+        alert('Please enter a room code');
+        return;
+      }
+      myPlayerName = playerNameInput.value.trim() || 'NaijaPlayer';
+      localStorage.setItem('whot_player_name', myPlayerName);
+
+      setupRoomChannel(code);
+
+      // Join room or create instance if joining peer
+      game.roomCode = code;
+      game.initRoom(code, 'host_' + code, myPlayerName, 4, true);
+
+      // Replace first player with user
+      if (game.players.length > 0) {
+        game.players[0].id = myPlayerId;
+        game.players[0].name = myPlayerName;
+      }
+
+      enterTableUI(code);
+    });
+
+    function enterTableUI(roomCode) {
+      lobbyView.classList.add('hidden');
+      gameTableView.classList.remove('hidden');
+      roomBadgeContainer.classList.remove('hidden');
+      roomBadgeContainer.classList.add('flex');
+      roomCodeDisplay.textContent = roomCode;
+      leaveRoomBtn.classList.remove('hidden');
+
+      // Update browser URL without reloading
+      const newUrl = getShareableRoomUrl(roomCode);
+      window.history.replaceState({ room: roomCode }, '', newUrl);
+
+      renderGameTable();
+      sound.playDealSnap();
+    }
+
+    leaveRoomBtn.addEventListener('click', () => {
+      if (confirm('Leave current Nigerian Whot table?')) {
+        clearInterval(game.timerInterval);
+        clearTimeout(game.aiThinkingTimeout);
+        game.status = 'lobby';
+
+        gameTableView.classList.add('hidden');
+        lobbyView.classList.remove('hidden');
+        roomBadgeContainer.classList.add('hidden');
+        roomBadgeContainer.classList.remove('flex');
+        leaveRoomBtn.classList.add('hidden');
+      }
+    });
+
+    // ==========================================
+    // 8. TABLE RENDERING & CARD ACTIONS
+    // ==========================================
+
+    function renderGameTable() {
+      if (game.status === 'lobby') return;
+
+      // 1. Render Top / Opponents Area
+      renderOpponents();
+
+      // 2. Render Discard Pile
+      renderActiveDiscard();
+
+      // 3. Render Market Deck live count
+      marketCountBadge.textContent = `${game.deck.length} cards`;
+
+      // 4. Render Demanded Shape Indicator (if Whot 20 was played)
+      if (game.topDiscard && game.topDiscard.number === 20 && game.activeShape && game.activeShape !== 'None') {
+        demandedShapeBadge.classList.remove('hidden');
+        demandedShapeBadge.classList.add('flex');
+        demandedShapeIcon.innerHTML = getShapeSvg(game.activeShape, "w-4 h-4", "currentColor");
+        demandedShapeText.textContent = game.activeShape;
+      } else {
+        demandedShapeBadge.classList.add('hidden');
+        demandedShapeBadge.classList.remove('flex');
+      }
+
+      // 5. Render Action Narrative
+      actionNarrative.textContent = game.lastAction;
+
+      // 6. Turn Status Indicators
+      const curr = game.currentPlayer;
+      if (curr) {
+        const isMyTurn = curr.id === myPlayerId;
+        currentTurnNameDisplay.textContent = isMyTurn ? "Your Turn!" : `${curr.name}'s Turn`;
+        currentTurnNameDisplay.className = `text-[11px] font-bold max-w-[90px] truncate text-center mt-1 ${isMyTurn ? 'text-amber-300 animate-pulse' : 'text-white/70'}`;
+
+        turnIndicatorBadge.textContent = isMyTurn ? "🟢 YOUR TURN" : `Turn: ${curr.name}`;
+        turnIndicatorBadge.className = `px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+          isMyTurn
+            ? 'bg-amber-500/20 border border-amber-400 text-amber-300 animate-pulseGlow'
+            : 'bg-white/10 border border-white/10 text-white/60'
+        }`;
+      }
+
+      // 7. Render Current User Hand
+      renderUserHand();
+
+      // 8. Shout Last Card button visibility
+      const me = game.players.find(p => p.id === myPlayerId);
+      if (me && me.cards.length === 1 && !me.disqualified) {
+        shoutLastCardBtn.classList.remove('hidden');
+      } else {
+        shoutLastCardBtn.classList.add('hidden');
+      }
+
+      lucide.createIcons();
+    }
+
+    function renderOpponents() {
+      opponentsArea.innerHTML = '';
+      const me = game.players.find(p => p.id === myPlayerId);
+      const opponents = game.players.filter(p => p.id !== myPlayerId);
+
+      opponents.forEach((p, idx) => {
+        const isTurn = game.currentPlayer && game.currentPlayer.id === p.id;
+        const el = document.createElement('div');
+        el.className = `flex flex-col items-center p-1.5 rounded-xl border transition-all ${
+          p.disqualified
+            ? 'opacity-30 border-red-900 bg-red-950/20'
+            : isTurn
+            ? 'border-amber-400 bg-black/60 shadow-lg shadow-amber-500/20 scale-105'
+            : 'border-white/10 bg-black/40'
+        }`;
+
+        el.innerHTML = `
+          <div class="relative flex items-center justify-center">
+            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-tr from-emerald-700 to-green-900 border ${
+              isTurn ? 'border-amber-400 animate-pulse' : 'border-white/20'
+            } flex items-center justify-center text-sm shadow">
+              ${p.avatar || '👤'}
+            </div>
+            ${p.hasPenaltyStrike ? '<span class="absolute -top-1 -right-1 px-1 rounded bg-red-600 text-[9px] font-bold text-white">⚠️</span>' : ''}
+            ${p.cardCount === 1 ? '<span class="absolute -bottom-1 -right-1 px-1 rounded-full bg-amber-500 text-[8px] font-black text-black animate-ping">1</span>' : ''}
+          </div>
+
+          <div class="mt-1 text-center">
+            <div class="text-[10px] sm:text-xs font-bold text-white max-w-[70px] sm:max-w-[85px] truncate">
+              ${escapeHtml(p.name)}
+            </div>
+            <div class="text-[9px] font-mono text-emerald-300 flex items-center justify-center gap-1">
+              <i data-lucide="layers" class="w-2.5 h-2.5"></i>
+              <span>${p.disqualified ? 'OUT' : `${p.cardCount} cards`}</span>
+            </div>
+          </div>
+        `;
+        opponentsArea.appendChild(el);
+      });
+    }
+
+    function renderActiveDiscard() {
+      const top = game.topDiscard;
+      if (!top) return;
+
+      const topNumEl = document.getElementById('discardTopNum');
+      const topShapeEl = document.getElementById('discardTopShape');
+      const centerGlyphEl = document.getElementById('discardCenterGlyph');
+      const bottomNumEl = document.getElementById('discardBottomNum');
+      const bottomShapeEl = document.getElementById('discardBottomShape');
+      const topCardEl = document.getElementById('topDiscardCard');
+
+      const colorClass = getSuitColorClass(top.suit);
+      topCardEl.className = `w-full h-full rounded-xl bg-white text-black shadow-2xl border-2 border-amber-400 flex flex-col justify-between p-2 select-none relative animate-dealIn ${colorClass}`;
+
+      topNumEl.textContent = top.number;
+      bottomNumEl.textContent = top.number;
+
+      topShapeEl.innerHTML = getShapeSvg(top.suit, "w-full h-full", "currentColor");
+      bottomShapeEl.innerHTML = getShapeSvg(top.suit, "w-full h-full", "currentColor");
+
+      if (top.number === 20 || top.suit === 'Whot') {
+        centerGlyphEl.innerHTML = `
+          <div class="flex flex-col items-center">
+            <span class="text-2xl sm:text-3xl">👑</span>
+            <span class="font-black text-xs tracking-widest text-amber-500">WHOT</span>
+          </div>
+        `;
+      } else {
+        centerGlyphEl.innerHTML = getShapeSvg(top.suit, "w-10 h-10 sm:w-14 sm:h-14", "currentColor");
+      }
+    }
+
+    function renderUserHand() {
+      userHandContainer.innerHTML = '';
+      const me = game.players.find(p => p.id === myPlayerId);
+      if (!me) return;
+
+      userCardCountBadge.textContent = `${me.cards.length} cards`;
+
+      const isMyTurn = game.currentPlayer && game.currentPlayer.id === myPlayerId;
+
+      me.cards.forEach((card, index) => {
+        const isPlayable = isMyTurn && game.isCardPlayable(card);
+        const colorClass = getSuitColorClass(card.suit);
+
+        const cardEl = document.createElement('div');
+        cardEl.className = `whot-card relative w-16 h-24 sm:w-20 sm:h-32 rounded-xl bg-white text-black shadow-xl border-2 shrink-0 flex flex-col justify-between p-1.5 select-none cursor-pointer transform ${
+          isPlayable
+            ? 'whot-card-playable border-amber-400 shadow-amber-400/40 ring-2 ring-amber-400/50 -translate-y-2'
+            : 'border-slate-300 opacity-80'
+        } ${colorClass}`;
+
+        cardEl.style.zIndex = index + 10;
+
+        cardEl.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-xs sm:text-sm font-black">${card.number}</span>
+            <div class="w-3 h-3 sm:w-4 sm:h-4">${getShapeSvg(card.suit, "w-full h-full", "currentColor")}</div>
+          </div>
+          <div class="flex-1 flex items-center justify-center">
+            ${
+              card.number === 20 || card.suit === 'Whot'
+                ? '<div class="text-center font-black text-[10px] sm:text-xs text-amber-500">👑<br>WHOT</div>'
+                : getShapeSvg(card.suit, "w-7 h-7 sm:w-9 sm:h-9", "currentColor")
+            }
+          </div>
+          <div class="flex items-center justify-between rotate-180">
+            <span class="text-xs sm:text-sm font-black">${card.number}</span>
+            <div class="w-3 h-3 sm:w-4 sm:h-4">${getShapeSvg(card.suit, "w-full h-full", "currentColor")}</div>
+          </div>
+        `;
+
+        cardEl.addEventListener('click', () => {
+          if (!isMyTurn) {
+            showAnnouncement("NOT YOUR TURN", "Wait for your turn to drop a card!");
+            sound.playTick();
+            return;
+          }
+
+          if (!game.isCardPlayable(card)) {
+            showAnnouncement("INVALID CARD", `Card must match ${game.topDiscard.suit} or ${game.topDiscard.number}!`);
+            sound.playBuzzer();
+            return;
+          }
+
+          game.playCard(game.currentTurnIndex, card.id);
+        });
+
+        userHandContainer.appendChild(cardEl);
+      });
+    }
+
+    // Market Click -> Draw Card
+    marketDeck.addEventListener('click', () => {
+      const isMyTurn = game.currentPlayer && game.currentPlayer.id === myPlayerId;
+      if (!isMyTurn) {
+        showAnnouncement("NOT YOUR TURN", "You can only draw on your turn!");
+        sound.playTick();
+        return;
+      }
+
+      game.drawCardForPlayer(game.currentTurnIndex, 1);
+      game.lastAction = `${game.currentPlayer.name} drew a card from the General Market.`;
+      game.advanceTurn(1);
+    });
+
+    // Shout "Last Card!" manually
+    shoutLastCardBtn.addEventListener('click', () => {
+      sound.playLastCard();
+      game.broadcastAnnouncement("LAST CARD!", `${myPlayerName} announced LAST CARD!`);
+      game.addChatMessage(myPlayerName, "LAST CARD! 🔥", true);
+    });
+
+    // Whot Wildcard Modal
+    function openWhotModal() {
+      whotModal.classList.remove('hidden');
+    }
+
+    function closeWhotModal() {
+      whotModal.classList.add('hidden');
+    }
+
+    document.querySelectorAll('.whot-shape-pick-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const declared = btn.getAttribute('data-shape');
+        closeWhotModal();
+        if (game.pendingWhotCard) {
+          const cardId = game.pendingWhotCard.id;
+          game.pendingWhotCard = null;
+          game.playCard(game.currentTurnIndex, cardId, declared);
+        }
+      });
+    });
+
+    // Game Over Check Up Modal
+    function openGameOverModal(winner, rankedPlayers) {
+      const winnerTitleDisplay = document.getElementById('winnerTitleDisplay');
+      const leaderboardList = document.getElementById('leaderboardList');
+
+      winnerTitleDisplay.textContent = `${winner.name} shouted Check Up and won!`;
+      leaderboardList.innerHTML = '';
+
+      rankedPlayers.forEach((p, rank) => {
+        const item = document.createElement('div');
+        item.className = `flex items-center justify-between p-2 rounded-xl border ${
+          rank === 0
+            ? 'bg-amber-500/20 border-amber-400 font-bold text-amber-300'
+            : 'bg-white/5 border-white/10 text-white/80'
+        }`;
+
+        item.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-5 text-center font-mono font-bold">${rank === 0 ? '🥇' : rank + 1}</span>
+            <span>${escapeHtml(p.name)}</span>
+            ${p.id === myPlayerId ? '<span class="text-[9px] px-1 bg-white/20 rounded">YOU</span>' : ''}
+            ${p.disqualified ? '<span class="text-[9px] px-1 bg-red-600 rounded text-white">DQ</span>' : ''}
+          </div>
+          <div class="font-mono font-black">
+            ${rank === 0 ? '0 pts (WINNER)' : `${p.score} pts`}
+          </div>
+        `;
+        leaderboardList.appendChild(item);
+      });
+
+      gameOverModal.classList.remove('hidden');
+    }
+
+    rematchBtn.addEventListener('click', () => {
+      gameOverModal.classList.add('hidden');
+      game.startMatch();
+    });
+
+    returnLobbyBtn.addEventListener('click', () => {
+      gameOverModal.classList.add('hidden');
+      leaveRoomBtn.click();
+    });
+
+    // Timer Circle Graphic update
+    const timerCircle = document.getElementById('timerCircle');
+    const timerSecondsText = document.getElementById('timerSecondsText');
+
+    function updateTimerDisplay(remaining, total) {
+      if (!timerCircle || !timerSecondsText) return;
+      timerSecondsText.textContent = remaining;
+
+      const percentage = (remaining / total) * 100;
+      timerCircle.setAttribute('stroke-dasharray', `${percentage}, 100`);
+
+      if (remaining <= 5) {
+        timerCircle.setAttribute('class', 'text-rose-500 transition-all duration-300 animate-pulse');
+        timerSecondsText.setAttribute('class', 'text-xs sm:text-sm font-black font-mono text-rose-400');
+      } else if (remaining <= 10) {
+        timerCircle.setAttribute('class', 'text-amber-400 transition-all duration-300');
+        timerSecondsText.setAttribute('class', 'text-xs sm:text-sm font-black font-mono text-amber-300');
+      } else {
+        timerCircle.setAttribute('class', 'text-emerald-400 transition-all duration-300');
+        timerSecondsText.setAttribute('class', 'text-xs sm:text-sm font-black font-mono text-white');
+      }
+    }
+
+    // Banner Announcement helper
+    const announcementBanner = document.getElementById('announcementBanner');
+    const announcementContent = document.getElementById('announcementContent');
+    let bannerTimeout = null;
+
+    function showAnnouncement(title, subtitle) {
+      clearTimeout(bannerTimeout);
+      announcementContent.className = "px-5 py-2 rounded-full font-black text-xs sm:text-sm tracking-wide shadow-2xl border flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-black border-amber-300";
+      announcementContent.innerHTML = `
+        <span class="text-base">📢</span>
+        <span>${escapeHtml(title)}: ${escapeHtml(subtitle)}</span>
+      `;
+      announcementBanner.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
+      announcementBanner.classList.add('opacity-100', 'translate-y-0');
+
+      bannerTimeout = setTimeout(() => {
+        announcementBanner.classList.remove('opacity-100', 'translate-y-0');
+        announcementBanner.classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
+      }, 3500);
+    }
+
+    function triggerConfetti() {
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+    }
+
+    // ==========================================
+    // 9. BOOTSTRAP APPLICATION
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initFirebase();
+      checkUrlRoomParam();
+      lucide.createIcons();
+    });
+
+  </script>
+</body>
+</html>
