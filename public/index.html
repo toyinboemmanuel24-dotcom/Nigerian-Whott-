@@ -56,6 +56,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Confetti for Check Up! celebration -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <!-- Global Real-Time WebSockets Sync (works on Vercel, phones, laptops worldwide) -->
+  <script src="https://unpkg.com/mqtt@5.16.1/dist/mqtt.min.js"></script>
   <!-- Firebase Compat for direct browser execution -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -226,22 +228,30 @@
             </div>
           </div>
 
-          <div class="mb-5 flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
-            <div>
-              <div class="text-xs font-bold text-white">Fill with AI Contenders</div>
-              <div class="text-[11px] text-white/50">Auto-add smart Nigerian bots</div>
+          <!-- BOT OR NO BOT SELECTION -->
+          <div class="mb-5">
+            <label class="block text-xs font-semibold text-white/70 uppercase tracking-wider mb-2">Choose Table Mode:</label>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button type="button" id="modeHumanOnlyBtn" class="flex flex-col items-center justify-center p-3.5 rounded-2xl border-2 border-emerald-400 bg-emerald-950/90 text-white transition cursor-pointer shadow-lg shadow-emerald-950/50 active:scale-95">
+                <span class="text-2xl mb-1">👥</span>
+                <span class="text-xs font-black text-white">Real Friends Only</span>
+                <span class="text-[10px] text-emerald-300 text-center mt-0.5 leading-tight font-medium">No bots. Wait for friends!</span>
+              </button>
+
+              <button type="button" id="modeWithBotsBtn" class="flex flex-col items-center justify-center p-3.5 rounded-2xl border border-white/20 bg-white/5 text-white/70 hover:text-white transition cursor-pointer active:scale-95">
+                <span class="text-2xl mb-1">🤖</span>
+                <span class="text-xs font-black text-white">Friends + AI Bots</span>
+                <span class="text-[10px] text-white/50 text-center mt-0.5 leading-tight font-medium">Auto-fill seats with bots</span>
+              </button>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="fillAiToggle" checked class="sr-only peer">
-              <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-            </label>
+            <input type="hidden" id="allowBotsInput" value="false">
           </div>
 
           <button id="startHostBtn" class="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-green-600 to-amber-500 hover:from-emerald-500 hover:to-amber-400 font-extrabold text-sm rounded-xl text-black shadow-lg shadow-green-900/40 flex items-center justify-center gap-2 transition active:scale-95">
             <i data-lucide="share-2" class="w-4 h-4"></i>
             GENERATE ROOM CODE & INVITE
           </button>
-          <p class="text-[11px] text-emerald-300/70 text-center mt-2">Generates your code first so you can share with friends before playing!</p>
+          <p class="text-[11px] text-emerald-300/70 text-center mt-2">Generates a new code first so you can share with friends before playing!</p>
         </div>
 
         <!-- Join Room Panel -->
@@ -311,11 +321,17 @@
               <span class="text-xs font-bold text-white uppercase tracking-wider">Players in Lobby:</span>
               <span id="waitingPlayerCountBadge" class="text-xs font-mono font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-400/30">1 Ready</span>
             </div>
-            <!-- Quick Add Bot button -->
-            <button id="waitingAddBotBtn" class="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition active:scale-95">
-              <i data-lucide="bot" class="w-3.5 h-3.5"></i>
-              <span>+ Add AI Bot</span>
-            </button>
+            <!-- Bot controls -->
+            <div class="flex items-center gap-1.5">
+              <button id="waitingAddBotBtn" class="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition active:scale-95">
+                <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                <span>+ Add Bot</span>
+              </button>
+              <button id="waitingClearBotsBtn" title="Remove all bots" class="text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 bg-rose-950/60 border border-rose-500/30 px-2.5 py-1 rounded-lg transition active:scale-95 hidden">
+                <i data-lucide="user-x" class="w-3.5 h-3.5"></i>
+                <span>Remove Bots</span>
+              </button>
+            </div>
           </div>
 
           <div id="waitingPlayersList" class="grid grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
@@ -1028,6 +1044,13 @@
           return true;
         }
         return false;
+      }
+
+      clearAllBots() {
+        this.players = this.players.filter(p => !p.isAi);
+        sound.playTick();
+        showAnnouncement("BOTS REMOVED", "Table set to real human players only!");
+        this.notifyLobbyState();
       }
 
       notifyLobbyState() {
@@ -1746,16 +1769,16 @@
     // 6. SHARING & BULLETPROOF URL RESILIENCE
     // ==========================================
     function generateRoomCode() {
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      let code = "WHOT";
-      for (let i = 0; i < 2; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return code;
+      const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+      const prefixes = ["WHOT", "NAIJ", "PLAY", "STAR"];
+      const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+      const num = Math.floor(Math.random() * 89 + 10);
+      const letter = letters.charAt(Math.floor(Math.random() * letters.length));
+      return `${prefix}${num}${letter}`;
     }
 
     function getShareableRoomUrl(roomCode) {
-      // Must preserve origin and pathname to prevent 404s on subpaths
+      // Preserve origin and pathname to prevent 404s
       return `${window.location.origin}${window.location.pathname}?room=${roomCode}#room=${roomCode}`;
     }
 
@@ -1797,15 +1820,18 @@
     // Check Dual-Strategy URL Auto-Fill upon load
     function checkUrlRoomParam() {
       const urlParams = new URLSearchParams(window.location.search);
-      let room = urlParams.get('room');
+      let room = urlParams.get('join') || urlParams.get('room');
       if (!room && window.location.hash) {
-        const hashMatch = window.location.hash.match(/room=([a-zA-Z0-9]+)/);
+        const hashMatch = window.location.hash.match(/(?:room|join)=([a-zA-Z0-9]+)/);
         if (hashMatch) room = hashMatch[1];
       }
       if (room) {
         tabJoinBtn.click();
         joinCodeInput.value = room.toUpperCase();
         showAnnouncement("TABLE INVITE! 🃏", `You were invited to table ${room.toUpperCase()}! Tap 'Enter Table' to join!`);
+      } else {
+        // Clean URL so every page reload gets a fresh code!
+        window.history.replaceState({}, '', window.location.pathname);
       }
     }
 
@@ -1819,29 +1845,131 @@
     const waitingPlayerCountBadge = document.getElementById('waitingPlayerCountBadge');
     const waitingPlayersList = document.getElementById('waitingPlayersList');
     const waitingAddBotBtn = document.getElementById('waitingAddBotBtn');
+    const waitingClearBotsBtn = document.getElementById('waitingClearBotsBtn');
     const hostWaitingActions = document.getElementById('hostWaitingActions');
     const guestWaitingMessage = document.getElementById('guestWaitingMessage');
     const waitingStartMatchBtn = document.getElementById('waitingStartMatchBtn');
     const waitingLeaveBtn = document.getElementById('waitingLeaveBtn');
     const guestLeaveBtn = document.getElementById('guestLeaveBtn');
 
+    // Bot Mode Selection in Lobby
+    const modeHumanOnlyBtn = document.getElementById('modeHumanOnlyBtn');
+    const modeWithBotsBtn = document.getElementById('modeWithBotsBtn');
+    const allowBotsInput = document.getElementById('allowBotsInput');
+
+    if (modeHumanOnlyBtn && modeWithBotsBtn && allowBotsInput) {
+      modeHumanOnlyBtn.addEventListener('click', () => {
+        allowBotsInput.value = 'false';
+        modeHumanOnlyBtn.className = 'flex flex-col items-center justify-center p-3.5 rounded-2xl border-2 border-emerald-400 bg-emerald-950/90 text-white transition cursor-pointer shadow-lg shadow-emerald-950/50 active:scale-95';
+        modeWithBotsBtn.className = 'flex flex-col items-center justify-center p-3.5 rounded-2xl border border-white/20 bg-white/5 text-white/70 hover:text-white transition cursor-pointer active:scale-95';
+        sound.playTick();
+      });
+
+      modeWithBotsBtn.addEventListener('click', () => {
+        allowBotsInput.value = 'true';
+        modeWithBotsBtn.className = 'flex flex-col items-center justify-center p-3.5 rounded-2xl border-2 border-emerald-400 bg-emerald-950/90 text-white transition cursor-pointer shadow-lg shadow-emerald-950/50 active:scale-95';
+        modeHumanOnlyBtn.className = 'flex flex-col items-center justify-center p-3.5 rounded-2xl border border-white/20 bg-white/5 text-white/70 hover:text-white transition cursor-pointer active:scale-95';
+        sound.playTick();
+      });
+    }
+
+    if (waitingClearBotsBtn) {
+      waitingClearBotsBtn.addEventListener('click', () => {
+        game.clearAllBots();
+        broadcastRoomMessage('LOBBY_STATE_BROADCAST', {
+          players: game.players,
+          hostId: game.hostId,
+          playerLimit: game.playerLimit
+        });
+      });
+    }
+
     // ==========================================
-    // 7. ROOM LAUNCH & PEER SYNC
-    // ==========================================
-    // ==========================================
-    // 7. ROOM LAUNCH & CROSS-DEVICE REAL-TIME SYNC
+    // 7. REAL-TIME CROSS-DEVICE MESSAGING (MQTT + SSE + BC)
     // ==========================================
     let sseSource = null;
+    let mqttClient = null;
 
-    function handleIncomingRoomMessage(type, data) {
-      if (!data) return;
+    function broadcastRoomMessage(type, data) {
+      const payload = {
+        type,
+        data,
+        roomCode: game.roomCode,
+        senderId: myPlayerId,
+        timestamp: Date.now()
+      };
 
-      if (type === 'PLAYER_JOINED') {
-        const newPlayer = data.newPlayer;
-        if (newPlayer && newPlayer.id !== myPlayerId) {
+      // 1. Send via Global MQTT WebSockets
+      if (mqttClient && mqttClient.connected) {
+        try {
+          mqttClient.publish(
+            `naija_whot_v5/rooms/${game.roomCode}`,
+            JSON.stringify(payload),
+            { qos: 1 }
+          );
+        } catch (e) {}
+      }
+
+      // 2. Send via Backend Server API
+      if (game.roomCode) {
+        fetch(`/api/rooms/${game.roomCode}/state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: type, payload: data })
+        }).catch(() => {});
+      }
+
+      // 3. Local BroadcastChannel
+      if (syncChannel) {
+        try {
+          syncChannel.postMessage(payload);
+        } catch (e) {}
+      }
+    }
+
+    function handleIncomingRoomMessage(type, data, senderId) {
+      if (!data || senderId === myPlayerId) return;
+
+      if (type === 'PLAYER_JOINED' || type === 'PLAYER_JOIN_REQUEST') {
+        const newPlayer = data.newPlayer || data.player || data;
+        if (newPlayer && newPlayer.id && newPlayer.id !== myPlayerId) {
           sound.playDealSnap();
-          showAnnouncement("PLAYER JOINED! 🎉", `${newPlayer.name} entered the waiting lobby!`);
+          showAnnouncement("PLAYER JOINED! 🎉", `${newPlayer.name || 'Friend'} joined the table!`);
+
+          // If we are Host, add to room roster
+          if (game.hostId === myPlayerId) {
+            const exists = game.players.some(p => p.id === newPlayer.id);
+            if (!exists) {
+              // If full and there is an AI bot, replace AI with real player
+              const aiIdx = game.players.findIndex(p => p.isAi);
+              if (game.players.length >= game.playerLimit && aiIdx !== -1) {
+                game.players.splice(aiIdx, 1);
+              }
+
+              if (game.players.length < game.playerLimit) {
+                game.players.push({
+                  id: newPlayer.id,
+                  name: newPlayer.name || 'Friend',
+                  avatar: newPlayer.avatar || '👤',
+                  isAi: false,
+                  cards: [],
+                  cardCount: 0,
+                  score: 0,
+                  hasPenaltyStrike: false,
+                  disqualified: false
+                });
+              }
+            }
+
+            // Immediately broadcast authoritative lobby state to all devices
+            broadcastRoomMessage('LOBBY_STATE_BROADCAST', {
+              players: game.players,
+              hostId: game.hostId,
+              playerLimit: game.playerLimit
+            });
+          }
         }
+
         if (data.players) {
           game.players = data.players;
         }
@@ -1850,9 +1978,11 @@
         if (game.status === 'waiting') {
           renderWaitingRoom();
         }
-      } else if (type === 'ROOM_UPDATED' || type === 'LOBBY_UPDATE' || type === 'ROOM_SYNC' || type === 'LOBBY_PLAYERS_UPDATE') {
+      } else if (type === 'LOBBY_STATE_BROADCAST' || type === 'ROOM_UPDATED' || type === 'LOBBY_UPDATE' || type === 'ROOM_SYNC') {
         const players = data.players || (data.payload && data.payload.players);
-        if (players) game.players = players;
+        if (players) {
+          game.players = players;
+        }
         if (data.hostId) game.hostId = data.hostId;
         if (data.playerLimit) game.playerLimit = data.playerLimit;
         if (game.status === 'waiting') {
@@ -1862,49 +1992,83 @@
         const payload = data.payload || data;
         applyRemoteState(payload);
         enterTableUI(game.roomCode);
-      } else if (type === 'GAME_STATE' || type === 'STATE_UPDATE') {
+      } else if (type === 'GAME_STATE' || type === 'STATE_UPDATE' || type === 'GAME_STATE_UPDATE') {
         const payload = data.payload || data;
         applyRemoteState(payload);
       }
     }
 
     function setupRoomChannel(roomCode) {
+      // 1. Local BroadcastChannel
       if (syncChannel) syncChannel.close();
       try {
         syncChannel = new BroadcastChannel(`whot_room_${roomCode}`);
         syncChannel.onmessage = (event) => {
           if (!event.data || event.data.roomCode !== game.roomCode) return;
-          handleIncomingRoomMessage(event.data.type, event.data.payload || event.data);
+          handleIncomingRoomMessage(event.data.type, event.data.data || event.data.payload || event.data, event.data.senderId);
         };
       } catch (e) {}
 
-      // Server-Sent Events (SSE) for internet cross-device sync!
+      // 2. Server-Sent Events (SSE)
       if (sseSource) {
         sseSource.close();
         sseSource = null;
       }
-
       try {
         sseSource = new EventSource(`/api/rooms/${roomCode}/stream`);
         sseSource.onmessage = (event) => {
           try {
             const parsed = JSON.parse(event.data);
             handleIncomingRoomMessage(parsed.type, parsed.data);
-          } catch (err) {
-            console.warn('Error parsing SSE event:', err);
-          }
+          } catch (err) {}
         };
-        sseSource.onerror = () => {
-          // EventSource automatically handles reconnection
-        };
-      } catch (e) {
-        console.warn('SSE not available:', e);
+      } catch (e) {}
+
+      // 3. Global MQTT over WebSockets (Zero-config, works everywhere on phones, Vercel, laptops)
+      if (mqttClient) {
+        try { mqttClient.end(); } catch (e) {}
+        mqttClient = null;
+      }
+      if (window.mqtt) {
+        try {
+          const topic = `naija_whot_v5/rooms/${roomCode}`;
+          mqttClient = window.mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+            clientId: 'whot_' + Math.random().toString(36).substring(2, 9),
+            keepalive: 30,
+            clean: true,
+            reconnectPeriod: 2000
+          });
+
+          mqttClient.on('connect', () => {
+            console.log('[MQTT] Connected to global broker for room:', roomCode);
+            mqttClient.subscribe(topic, { qos: 1 });
+
+            // If we are a joining guest, immediately ask host to send lobby state!
+            if (game.hostId !== myPlayerId) {
+              broadcastRoomMessage('PLAYER_JOIN_REQUEST', {
+                newPlayer: { id: myPlayerId, name: myPlayerName, avatar: '👤' }
+              });
+            }
+          });
+
+          mqttClient.on('message', (t, msgBuffer) => {
+            if (t === topic) {
+              try {
+                const parsed = JSON.parse(msgBuffer.toString());
+                if (parsed.senderId !== myPlayerId) {
+                  handleIncomingRoomMessage(parsed.type, parsed.data, parsed.senderId);
+                }
+              } catch (e) {}
+            }
+          });
+        } catch (e) {
+          console.warn('[MQTT] Error initializing broker:', e);
+        }
       }
     }
 
     function applyRemoteState(payload) {
       if (!payload) return;
-      // Update local game object
       if (typeof payload.deckCount === 'number') game.deck.length = payload.deckCount;
       if (payload.discardPile) game.discardPile = payload.discardPile;
       if (typeof payload.currentTurnIndex === 'number') game.currentTurnIndex = payload.currentTurnIndex;
@@ -1914,7 +2078,6 @@
       if (payload.turnDuration) game.turnDuration = payload.turnDuration;
       if (payload.timerStart) game.timerStart = payload.timerStart;
 
-      // Update players while retaining our private cards
       if (payload.players) {
         payload.players.forEach(remoteP => {
           const localP = game.players.find(p => p.id === remoteP.id);
@@ -1952,7 +2115,7 @@
       localStorage.setItem('whot_player_name', myPlayerName);
 
       const limit = parseInt(playerLimitRange.value, 10);
-      const fillAi = fillAiToggle.checked;
+      const fillAi = allowBotsInput ? allowBotsInput.value === 'true' : false;
       const roomCode = generateRoomCode();
 
       setupRoomChannel(roomCode);
@@ -1969,9 +2132,7 @@
             playerLimit: limit
           })
         });
-      } catch (e) {
-        console.warn('API create room fallback:', e);
-      }
+      } catch (e) {}
 
       enterWaitingLobbyUI(roomCode, true);
     });
@@ -2025,7 +2186,6 @@
           }
         }
       } catch (e) {
-        console.warn('Join fetch fallback:', e);
         game.initWaitingLobby(code, 'host_' + code, myPlayerName, 4, false);
         game.players[0].id = myPlayerId;
         game.players[0].name = myPlayerName;
@@ -2033,16 +2193,10 @@
 
       enterWaitingLobbyUI(code, false);
 
-      // Local broadcast fallback
-      if (syncChannel) {
-        syncChannel.postMessage({
-          type: 'LOBBY_UPDATE',
-          roomCode: code,
-          hostId: game.hostId,
-          playerLimit: game.playerLimit,
-          players: game.players
-        });
-      }
+      // Broadcast join request to host across MQTT & BroadcastChannel
+      broadcastRoomMessage('PLAYER_JOIN_REQUEST', {
+        newPlayer: { id: myPlayerId, name: myPlayerName, avatar: '👤' }
+      });
     });
 
     function enterWaitingLobbyUI(roomCode, isHost = true) {
